@@ -310,8 +310,9 @@ const escalarASalvavidas = async (params: {
   usuarioId: number;
   mensajeUsuario: string;
   respuestaIA: string;
+  profesionalId?: number | null;
 }): Promise<{ chatId: number | null; profesionalId: number | null }> => {
-  const profesionalId = await buscarProfesionalSalvavidas();
+  const profesionalId = params.profesionalId ?? await buscarProfesionalSalvavidas();
 
   if (!profesionalId) {
     return { chatId: null, profesionalId: null };
@@ -421,8 +422,13 @@ export const chatConIA = async (req: AuthRequest, res: Response): Promise<void> 
     const chatIAId = await getOrCreateIAChat(req.user.id);
 
     if (alerta.esCritico) {
-      const respuestaCritica =
-        'Gracias por decirme como te sientes. Lo que estas viviendo es importante y no estas solo. Voy a conectarte de inmediato con Salvavidas para que un profesional pueda acompanarte ahora mismo.';
+      // PRIMERO buscar disponibilidad profesional antes de responder
+      const profesionalId = await buscarProfesionalSalvavidas();
+      const hayProfesional = profesionalId !== null;
+
+      const respuestaCritica = hayProfesional
+        ? 'Gracias por decirme como te sientes. Lo que estas viviendo es importante y no estas solo. Voy a conectarte de inmediato con Salvavidas para que un profesional pueda acompanarte ahora mismo.'
+        : 'Gracias por decirme como te sientes. Lo que estas viviendo es importante y no estas solo. Si necesitas hablar con alguien urgente, por favor contacta a la linea de emergencia 123 (Salvavidas) o acude a la consejeria de tu universidad. Yo estoy aqui para escucharte.';
 
       await guardarInteraccionIA({
         chatId: chatIAId,
@@ -431,11 +437,17 @@ export const chatConIA = async (req: AuthRequest, res: Response): Promise<void> 
         respuestaIA: respuestaCritica,
       });
 
-      const escalamiento = await escalarASalvavidas({
-        usuarioId: req.user.id,
-        mensajeUsuario: mensaje,
-        respuestaIA: respuestaCritica,
-      });
+      let escalamiento = { chatId: null as number | null, profesionalId: null as number | null };
+      if (hayProfesional) {
+        escalamiento = await escalarASalvavidas({
+          usuarioId: req.user.id,
+          mensajeUsuario: mensaje,
+          respuestaIA: respuestaCritica,
+          profesionalId,
+        });
+      } else {
+        console.warn('[SALVAVIDAS] No hay profesional disponible para escalar caso critico del usuario', req.user.id);
+      }
 
       res.status(201).json(APISuccessResponse({
         usuario_id: req.user.id,
@@ -443,13 +455,14 @@ export const chatConIA = async (req: AuthRequest, res: Response): Promise<void> 
         mensaje_usuario: mensaje,
         respuesta_ia: respuestaCritica,
         timestamp: new Date().toISOString(),
-        requiere_salvavidas: true,
+        requiere_salvavidas: hayProfesional,
         nivel_alerta: alerta.nivel,
         coincidencias_alerta: alerta.coincidencias,
         chat_salvavidas_id: escalamiento.chatId,
         psicologo_asignado_id: escalamiento.profesionalId,
-        mensaje_sistema:
-          'Detectamos una situacion de riesgo. Ya derivamos tu caso a Salvavidas para atencion profesional.',
+        mensaje_sistema: hayProfesional
+          ? 'Detectamos una situacion de riesgo. Ya derivamos tu caso a Salvavidas para atencion profesional.'
+          : 'Detectamos una situacion de riesgo. No hay un profesional disponible en este momento. Por favor contacta a la linea de emergencia 123 (Salvavidas).',
       }, 'Chat completado exitosamente'));
       return;
     }

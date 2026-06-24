@@ -571,7 +571,7 @@ export const chatWithOllama = async (params: {
     if (userId) {
       try {
         const perfil = await analizarPatronesEmocionales(userId, 25);
-        resumenPerfil = await construirResumenPerfil(userId);
+        resumenPerfil = await construirResumenPerfil(userId, perfil);
         perfilContexto = {
           emociones_frecuentes: perfil.emociones_frecuentes,
           temas_recurrentes: perfil.temas_recurrentes,
@@ -597,24 +597,17 @@ export const chatWithOllama = async (params: {
 
     const promspts = construirPromptFinal(mensaje, systemPrompt, numeroMensaje, contextoDinamico);
 
-    // DEBUG: Log del estilo seleccionado
-    const estiloNum = numeroMensaje % 6;
-    console.log(`[NOA DEBUG] Estilo #${estiloNum} (mensaje #${numeroMensaje})`);
+    if (process.env.NODE_ENV !== 'production') {
+      const estiloNum = numeroMensaje % 6;
+      console.log(`[NOA DEBUG] Estilo #${estiloNum} (mensaje #${numeroMensaje})`);
+    }
 
-    // Primera consulta - ahora con prompts mejorados
     const respuestaCruda = await queryOllama(promspts.user, promspts.system);
     let respuesta = respuestaCruda.trim();
 
-    // DEBUG: Log de respuesta cruda de Ollama
-    console.log(`[NOA DEBUG] Respuesta cruda Ollama: "${respuesta.substring(0, 100)}..."`);
-
-    // Validación más flexible - aceptamos más variedad de respuestas
     if (!esRespuestaAceptable(respuesta, mensaje)) {
       const fallbackEmocional = detectarEmocion(mensaje);
-      console.log(`[NOA DEBUG] Respuesta rechazada. Usando fallback emocional: ${fallbackEmocional}`);
       respuesta = generarRespuestaFallbackNatural(fallbackEmocional, mensaje);
-    } else {
-      console.log(`[NOA DEBUG] ✅ Respuesta ACEPTADA`);
     }
 
     return {

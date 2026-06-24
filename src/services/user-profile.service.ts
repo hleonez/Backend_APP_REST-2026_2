@@ -7,7 +7,7 @@ import { eq, and, desc } from 'drizzle-orm';
  * Recopila datos de conversaciones para personalizar las respuestas de NOA
  */
 
-interface PerfilEmocional {
+export interface PerfilEmocional {
   emociones_frecuentes: string[];
   temas_recurrentes: string[];
   patrones_comportamiento: string[];
@@ -157,9 +157,11 @@ export const analizarPatronesEmocionales = async (userId: number, limit: number 
 /**
  * Construye un resumen de perfil del usuario para contextualización
  */
-export const construirResumenPerfil = async (userId: number): Promise<string> => {
+export const construirResumenPerfil = async (userId: number, perfil?: PerfilEmocional): Promise<string> => {
   try {
-    const perfil = await analizarPatronesEmocionales(userId);
+    if (!perfil) {
+      perfil = await analizarPatronesEmocionales(userId);
+    }
 
     if (perfil.emociones_frecuentes.length === 0) {
       return ''; // No hay suficiente historial
