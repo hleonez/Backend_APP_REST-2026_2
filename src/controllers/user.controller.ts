@@ -5,6 +5,7 @@ import { db } from '../db';
 import * as schema from '../db/schema';
 import { eq } from 'drizzle-orm';
 import { AuthRequest } from '../middleware/auth.middleware';
+import { APISuccessResponse, APIErrorResponse } from '../shared/utils/api.utils';
 
 const userCreateSchema = z.object({
   nombres: z.string().min(1),
@@ -15,6 +16,189 @@ const userCreateSchema = z.object({
 
 const userPutSchema = userCreateSchema;
 const userPatchSchema = userCreateSchema.partial();
+const streakCommitmentSchema = z.object({
+  goal_days: z.number().int().min(1).max(365),
+});
+
+const toDateOnlyString = (value: Date): string => value.toISOString().split('T')[0];
+
+const parseDateOnly = (value: Date | string | null): Date | null => {
+  if (!value) return null;
+  if (value instanceof Date) {
+    return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return new Date(Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate()));
+};
+
+export const getMyStreakCommitment = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const usuarioId = req.user?.id;
+    if (!usuarioId) {
+      res.status(401).json(APIErrorResponse('Usuario no autenticado'));
+      return;
+    }
+
+    const [user] = await db
+      .select({
+        streak_goal_days: schema.usuarios.streak_goal_days,
+        streak_count: schema.usuarios.streak_count,
+        streak_last_date: schema.usuarios.streak_last_date,
+        streak_goal_set: schema.usuarios.streak_goal_set,
+      })
+      .from(schema.usuarios)
+      .where(eq(schema.usuarios.id, usuarioId))
+      .limit(1);
+
+    if (!user) {
+      res.status(404).json(APIErrorResponse('Usuario no encontrado'));
+      return;
+    }
+
+    res.status(200).json(APISuccessResponse({
+      goal_days: user.streak_goal_days,
+      streak_count: user.streak_count,
+      last_streak_date: user.streak_last_date ? toDateOnlyString(new Date(user.streak_last_date)) : null,
+      streak_goal_set: user.streak_goal_set,
+    }, 'Compromiso de racha obtenido correctamente'));
+  } catch (error) {
+    console.error('Error getMyStreakCommitment:', error);
+    res.status(500).json(APIErrorResponse('Error al obtener compromiso de racha'));
+  }
+};
+
+export const updateMyStreakCommitment = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const usuarioId = req.user?.id;
+    if (!usuarioId) {
+      res.status(401).json(APIErrorResponse('Usuario no autenticado'));
+      return;
+    }
+
+    const parsed = streakCommitmentSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json(APIErrorResponse('Datos inválidos', parsed.error.errors.map((e) => e.message)));
+      return;
+    }
+
+    const goalDays = parsed.data.goal_days;
+
+    const [updated] = await db
+      .update(schema.usuarios)
+      .set({
+        streak_goal_days: goalDays,
+        streak_goal_set: true,
+        updated_at: new Date(),
+      })
+      .where(eq(schema.usuarios.id, usuarioId))
+      .returning({
+        streak_goal_days: schema.usuarios.streak_goal_days,
+        streak_count: schema.usuarios.streak_count,
+        streak_last_date: schema.usuarios.streak_last_date,
+        streak_goal_set: schema.usuarios.streak_goal_set,
+      });
+
+    if (!updated) {
+      res.status(404).json(APIErrorResponse('Usuario no encontrado'));
+      return;
+    }
+
+    res.status(200).json(APISuccessResponse({
+      goal_days: updated.streak_goal_days,
+      streak_count: updated.streak_count,
+      last_streak_date: updated.streak_last_date ? toDateOnlyString(new Date(updated.streak_last_date)) : null,
+      streak_goal_set: updated.streak_goal_set,
+    }, 'Compromiso de racha actualizado correctamente'));
+  } catch (error) {
+    console.error('Error updateMyStreakCommitment:', error);
+    res.status(500).json(APIErrorResponse('Error al actualizar compromiso de racha'));
+  }
+};
+
+export const registerMyDailyStreak = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const usuarioId = req.user?.id;
+    if (!usuarioId) {
+      res.status(401).json(APIErrorResponse('Usuario no autenticado'));
+      return;
+    }
+
+    const [current] = await db
+      .select({
+        streak_goal_days: schema.usuarios.streak_goal_days,
+        streak_count: schema.usuarios.streak_count,
+        streak_last_date: schema.usuarios.streak_last_date,
+        streak_goal_set: schema.usuarios.streak_goal_set,
+      })
+      .from(schema.usuarios)
+      .where(eq(schema.usuarios.id, usuarioId))
+      .limit(1);
+
+    if (!current) {
+      res.status(404).json(APIErrorResponse('Usuario no encontrado'));
+      return;
+    }
+
+    if (!current.streak_goal_set) {
+      res.status(409).json(APIErrorResponse('Debes elegir tu compromiso de racha primero'));
+      return;
+    }
+
+    const today = parseDateOnly(new Date())!;
+    const last = parseDateOnly(current.streak_last_date);
+    let nextCount = current.streak_count;
+    let activatedToday = false;
+
+    if (!last) {
+      nextCount = 1;
+      activatedToday = true;
+    } else {
+      const diffDays = Math.floor((today.getTime() - last.getTime()) / (1000 * 60 * 60 * 24));
+      if (diffDays === 0) {
+        activatedToday = false;
+      } else if (diffDays === 1) {
+        nextCount += 1;
+        activatedToday = true;
+      } else {
+        nextCount = 1;
+        activatedToday = true;
+      }
+    }
+
+    const [updated] = await db
+      .update(schema.usuarios)
+      .set({
+        streak_count: nextCount,
+        streak_last_date: activatedToday ? today.toISOString().split('T')[0] : current.streak_last_date,
+        updated_at: new Date(),
+      })
+      .where(eq(schema.usuarios.id, usuarioId))
+      .returning({
+        streak_goal_days: schema.usuarios.streak_goal_days,
+        streak_count: schema.usuarios.streak_count,
+        streak_last_date: schema.usuarios.streak_last_date,
+        streak_goal_set: schema.usuarios.streak_goal_set,
+      });
+
+    if (!updated) {
+      res.status(404).json(APIErrorResponse('Usuario no encontrado'));
+      return;
+    }
+
+    res.status(200).json(APISuccessResponse({
+      activated_today: activatedToday,
+      goal_days: updated.streak_goal_days,
+      streak_count: updated.streak_count,
+      last_streak_date: updated.streak_last_date ? toDateOnlyString(new Date(updated.streak_last_date)) : null,
+      streak_goal_set: updated.streak_goal_set,
+    }, activatedToday ? 'Racha diaria registrada' : 'La racha de hoy ya estaba registrada'));
+  } catch (error) {
+    console.error('Error registerMyDailyStreak:', error);
+    res.status(500).json(APIErrorResponse('Error al registrar racha diaria'));
+  }
+};
 
 export const listUsers = async (_req: AuthRequest, res: Response): Promise<void> => {
   try {
