@@ -16,6 +16,11 @@ router.post('/', authenticate, isPsicologo, userController.createUser)
  */
 router.get('/profile', authenticate, isUsuario, userController.getProfile);
 
+// Compromiso de racha del usuario autenticado
+router.get('/streak-commitment', authenticate, isUsuario, userController.getMyStreakCommitment);
+router.put('/streak-commitment', authenticate, isUsuario, userController.updateMyStreakCommitment);
+router.post('/streak-commitment/register-daily', authenticate, isUsuario, userController.registerMyDailyStreak);
+
 // Obtener usuario por id (autenticado y dueño o psicólogo)
 router.get('/:id', authenticate, userController.getUserById)
 // Actualizar usuario completo (solo psicólogo o dueño con restricciones)

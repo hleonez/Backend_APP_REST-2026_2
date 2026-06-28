@@ -4,7 +4,7 @@ import { generateToken } from '../config/jwt';
 import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import { db } from '../db';
-import { usuarios } from '../db/schema';
+import { usuarios, roles } from '../db/schema';
 import { ROLES } from '../shared/const/roles.const';
 import { RoleNombre } from '../shared/types/roles.types';
 
@@ -18,6 +18,8 @@ export const registerSchema = z.object({
   ciudad: z.string().min(2, 'Ciudad demasiado corta'),
   edad: z.number().min(0, 'Edad inválida'),
   sexo: z.enum(['M', 'F']).optional(),
+  semestre_actual: z.string().min(1).optional(),
+  fecha_nacimiento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha inválido (YYYY-MM-DD)').optional(),
 });
 
 const loginSchema = z.object({
@@ -58,7 +60,8 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     const correoNormalizado = userData.correo.toLowerCase().trim();
 
     // Check if user already exists
-    const existingUser = await db.select()
+    const existingUser = await db
+      .select({ id: usuarios.id })
       .from(usuarios)
       .where(eq(usuarios.correo, correoNormalizado))
       .limit(1);
@@ -71,6 +74,15 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     // Hash password
     const hashedPassword = await bcrypt.hash(userData.contrasena, 10);
 
+    // Resolver rol "usuario" por nombre (evita depender de IDs fijos)
+    const [usuarioRole] = await db
+      .select({ id: roles.id })
+      .from(roles)
+      .where(eq(roles.nombre, ROLES.USUARIO.nombre))
+      .limit(1);
+
+    const rolUsuarioId = usuarioRole?.id ?? null;
+
     // Create user - aseguramos que todos los campos requeridos están explícitamente establecidos
     const [newUser] = await db.insert(usuarios)
       .values({
@@ -79,9 +91,12 @@ export const register = async (req: Request, res: Response): Promise<void> => {
         nombres: userData.nombres,
         apellidos: userData.apellidos,
         telefono: userData.telefono,
+        ciudad: userData.ciudad,
         edad: userData.edad,
         sexo: userData.sexo,
-        id_rol: ROLES.USUARIO.id
+        semestre_actual: userData.semestre_actual,
+        fecha_nacimiento: userData.fecha_nacimiento,
+        id_rol: rolUsuarioId,
       })
       .returning({
         id: usuarios.id,
@@ -129,7 +144,15 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     const { correo, contrasena } = validationResult.data;
     const correoNormalizado = correo.toLowerCase().trim();
 
-    const results = await db.select()
+    const results = await db
+      .select({
+        id: usuarios.id,
+        correo: usuarios.correo,
+        contrasena: usuarios.contrasena,
+        nombres: usuarios.nombres,
+        apellidos: usuarios.apellidos,
+        id_rol: usuarios.id_rol,
+      })
       .from(usuarios)
       .where(eq(usuarios.correo, correoNormalizado))
       .limit(1);
@@ -212,7 +235,7 @@ export const recoverPassword = async (
     const correoNormalizado = correo.toLowerCase().trim();
 
     const userResult = await db
-      .select()
+      .select({ id: usuarios.id })
       .from(usuarios)
       .where(eq(usuarios.correo, correoNormalizado))
       .limit(1);

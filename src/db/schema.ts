@@ -28,6 +28,11 @@ export const usuarios = pgTable('usuarios', {
 
   especialidad_psicologo: varchar('especialidad_psicologo', { length: 255 }),
 
+  streak_goal_days: integer('streak_goal_days').default(7).notNull(),
+  streak_count: integer('streak_count').default(0).notNull(),
+  streak_last_date: date('streak_last_date'),
+  streak_goal_set: boolean('streak_goal_set').default(false).notNull(),
+
   fecha_registro: timestamp('fecha_registro').defaultNow().notNull(),
 
   is_active: boolean('is_active').default(true).notNull(),
