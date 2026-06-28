@@ -15,6 +15,13 @@
       "when": 1775700000000,
       "tag": "0001_premios_canje",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1775851200000,
+      "tag": "0002_streak_commitment",
+      "breakpoints": true
     }
   ]
 }
