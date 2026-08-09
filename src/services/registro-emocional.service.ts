@@ -1,6 +1,7 @@
 import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import { db } from '../db';
 import * as schema from '../db/schema';
+import { getTodayIso } from '../shared/utils/fechas.utils';
 
 type SaveRegistroEmocionalInput = {
   usuario_id: number;
@@ -22,10 +23,6 @@ const parseDdMmYyyyToIso = (date: string): string | null => {
   if (parsed.toISOString().slice(0, 10) !== iso) return null;
 
   return iso;
-};
-
-const getTodayIso = (): string => {
-  return new Date().toISOString().slice(0, 10);
 };
 
 type PreguntaWithOpciones = {
@@ -230,6 +227,24 @@ export const saveRespuestasRegistroEmocionalService = async (input: SaveRegistro
   }
 
   const inserted = await db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select({ id: schema.registro_emocional.id })
+      .from(schema.registro_emocional)
+      .where(
+        and(
+          eq(schema.registro_emocional.usuario_id, input.usuario_id),
+          eq(schema.registro_emocional.fecha_dia, todayIso),
+          isNull(schema.registro_emocional.deleted_at),
+        ),
+      )
+      .limit(1);
+
+    if (existing) {
+      const error = new Error('Ya completaste el test emocional de hoy.');
+      (error as any).code = 'REGISTRO_DUPLICADO';
+      throw error;
+    }
+
     await tx
       .delete(schema.registro_emocional)
       .where(

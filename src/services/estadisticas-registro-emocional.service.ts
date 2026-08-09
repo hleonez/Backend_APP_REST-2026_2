@@ -7,6 +7,7 @@ import {
   registro_actividades_usuarios,
 } from '../db/schema';
 import { eq, and, gte, lte, isNull, sql } from 'drizzle-orm';
+import { getTodayIso, toIsoDate } from '../shared/utils/fechas.utils';
 
 interface CalendarioDiaData {
   fecha: string;
@@ -118,17 +119,6 @@ const toDateKey = (value: unknown): string => {
   }
 
   return raw;
-};
-
-const getTodayIso = (): string => {
-  return new Date().toISOString().slice(0, 10);
-};
-
-const toIsoDate = (date: Date): string => {
-  const y = date.getFullYear();
-  const m = (date.getMonth() + 1).toString().padStart(2, '0');
-  const d = date.getDate().toString().padStart(2, '0');
-  return `${y}-${m}-${d}`;
 };
 
 const inicioYFinMesActual = () => {
@@ -645,7 +635,7 @@ export const activarRachaDiariaService = async (
       and(
         eq(registro_actividades_usuarios.usuario_id, usuarioId),
         eq(registro_actividades_usuarios.opcion_id, opcionRachaId),
-        sql`DATE(${registro_actividades_usuarios.fecha}) = CURRENT_DATE`,
+        sql`DATE(${registro_actividades_usuarios.fecha}) = ${hoyIso}`,
         isNull(registro_actividades_usuarios.deleted_at)
       )
     )

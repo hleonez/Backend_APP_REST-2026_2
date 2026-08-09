@@ -48,6 +48,11 @@ export const saveRespuestasRegistroEmocional = async (req: Request, res: Respons
   } catch (error) {
     console.error('Error guardando respuestas de registro emocional:', error);
 
+    if (error instanceof Error && (error as any).code === 'REGISTRO_DUPLICADO') {
+      res.status(409).json(APIErrorResponse(error.message));
+      return;
+    }
+
     if (error instanceof Error) {
       res.status(400).json(APIErrorResponse(error.message));
       return;
