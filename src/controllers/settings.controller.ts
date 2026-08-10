@@ -7,13 +7,23 @@ import * as schema from "../db/schema";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 
-// Esquema de validación para actualizar perfil
+// Normaliza cadenas vacías a null en campos opcionales (evita errores 500 en columnas date)
+const emptyToNull = (value: unknown): unknown => (value === "" ? null : value);
+
+// Esquema de validación para actualizar perfil (actualización parcial: solo campos enviados)
 const updateProfileSchema = z.object({
-  nombres: z.string().min(1),
-  apellidos: z.string().min(1),
-  telefono: z.string().optional(),
-  semestre_actual: z.string().optional(),
-  fecha_nacimiento: z.string().optional()
+  nombres: z.string().min(1).optional(),
+  apellidos: z.string().min(1).optional(),
+  telefono: z.preprocess(emptyToNull, z.string().nullable().optional()),
+  semestre_actual: z.preprocess(emptyToNull, z.string().nullable().optional()),
+  fecha_nacimiento: z.preprocess(
+    emptyToNull,
+    z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "Formato de fecha inválido (YYYY-MM-DD)")
+      .nullable()
+      .optional()
+  )
 });
 // Esquema para enviar el feedback
 const sendFeedbackSchema = z.object({
@@ -48,7 +58,9 @@ export const getProfile = async (req: AuthRequest, res: Response): Promise<void>
       res.status(404).json({ message: 'Usuario no encontrado' });
       return;
     }
-    res.json(user);
+    // Nunca exponer la contraseña
+    const { contrasena, ...userSinContrasena } = user;
+    res.json(userSinContrasena);
   } catch (error) {
     console.error('Error getting profile:', error);
     res.status(500).json({ message: 'Error en el servidor' });
@@ -69,6 +81,20 @@ export const updateProfile = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
     const data = parsed.data;
+
+    // Construir el payload únicamente con los campos enviados (actualización parcial)
+    const payload: any = { updated_at: new Date() };
+    if (data.nombres !== undefined) payload.nombres = data.nombres;
+    if (data.apellidos !== undefined) payload.apellidos = data.apellidos;
+    if (data.telefono !== undefined) payload.telefono = data.telefono;
+    if (data.semestre_actual !== undefined) payload.semestre_actual = data.semestre_actual;
+    if (data.fecha_nacimiento !== undefined) payload.fecha_nacimiento = data.fecha_nacimiento;
+
+    if (Object.keys(payload).length === 1) {
+      res.status(400).json({ message: 'No hay campos para actualizar' });
+      return;
+    }
+
     const [existing] = await db
       .select()
       .from(schema.usuarios)
@@ -80,22 +106,22 @@ export const updateProfile = async (req: AuthRequest, res: Response): Promise<vo
     }
     const [updated] = await db
       .update(schema.usuarios)
-      .set({
-        nombres: data.nombres,
-        apellidos: data.apellidos,
-        telefono: data.telefono,
-        semestre_actual: data.semestre_actual,
-        fecha_nacimiento: data.fecha_nacimiento,
-        updated_at: new Date()
-      })
+      .set(payload)
       .where(eq(schema.usuarios.id, userId))
       .returning({
         id: schema.usuarios.id,
         nombres: schema.usuarios.nombres,
         apellidos: schema.usuarios.apellidos,
-        correo: schema.usuarios.correo
+        correo: schema.usuarios.correo,
+        telefono: schema.usuarios.telefono,
+        semestre_actual: schema.usuarios.semestre_actual,
+        fecha_nacimiento: schema.usuarios.fecha_nacimiento
       });
-    res.json(updated);
+
+    res.status(200).json({
+      message: 'Perfil actualizado correctamente',
+      user: updated
+    });
   } catch (error) {
     console.error('Error updating profile:', error);
     res.status(500).json({ message: 'Error en el servidor' });
