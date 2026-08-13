@@ -18,11 +18,82 @@ import { createMensaje, deleteMensaje, getMensajeById, listMensajes, updateMensa
 
 const router = Router();
 
-// ⚠️ RUTAS IA DEBEN IR PRIMERO (antes de /:chatId para evitar conflictos)
+/**
+ * @swagger
+ * tags:
+ *   name: Chats & IA
+ *   description: Endpoints para interacción con el Chatbot IA y salas de chat
+ */
+
+/**
+ * @swagger
+ * /api/chats/ia:
+ *   post:
+ *     summary: Enviar un mensaje al Chatbot IA
+ *     tags: [Chats & IA]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - mensaje
+ *             properties:
+ *               mensaje:
+ *                 type: string
+ *                 example: ¿Cómo puedo manejar la ansiedad antes de un examen?
+ *     responses:
+ *       200:
+ *         description: Respuesta generada por la IA
+ */
 router.post('/ia', authenticate, chatConIA);
+
+/**
+ * @swagger
+ * /api/chats/ia/historial:
+ *   get:
+ *     summary: Obtener el historial de chat con la IA
+ *     tags: [Chats & IA]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Lista de mensajes anteriores con la IA
+ */
 router.get('/ia/historial', authenticate, getHistorialChatIA);
+
 router.post('/ia/detener', authenticate, detenerChatIA);
+
+/**
+ * @swagger
+ * /api/chats/ia/avanzado:
+ *   post:
+ *     summary: Consulta avanzada a la IA con contexto de registro emocional
+ *     tags: [Chats & IA]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               mensaje:
+ *                 type: string
+ *                 example: Analiza mi estado emocional y dame recomendaciones
+ *               contexto:
+ *                 type: string
+ *                 example: registro_emocional
+ *     responses:
+ *       200:
+ *         description: Análisis contextualizado e inteligencias de bienestar
+ */
 router.post('/ia/avanzado', authenticate, chatConIAAvanzado);
+
 router.get('/actividades/recomendadas', authenticate, obtenerActividadesRecomendadas);
 router.get('/estado-psicologico', authenticate, obtenerEstadoPsicologicoUsuario);
 

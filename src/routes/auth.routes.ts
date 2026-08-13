@@ -7,23 +7,104 @@ import * as authController from '../controllers/auth.controller';
 const router = Router();
 
 /**
- * @route POST /api/auth/register
- * @desc Register a new user
- * @access Public
+ * @swagger
+ * tags:
+ *   name: Auth
+ *   description: Autenticación y registro de usuarios
+ */
+
+/**
+ * @swagger
+ * /api/auth/register:
+ *   post:
+ *     summary: Registrar un nuevo usuario
+ *     tags: [Auth]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - nombres
+ *               - apellidos
+ *               - correo
+ *               - contrasena
+ *             properties:
+ *               nombres:
+ *                 type: string
+ *                 example: Samuel
+ *               apellidos:
+ *                 type: string
+ *                 example: León
+ *               correo:
+ *                 type: string
+ *                 example: samuel@example.com
+ *               contrasena:
+ *                 type: string
+ *                 example: password123
+ *     responses:
+ *       201:
+ *         description: Usuario registrado exitosamente
  */
 router.post('/register', authController.register);
 
 /**
- * @route POST /api/auth/login
- * @desc Login user/psychologist and get token
- * @access Public
+ * @swagger
+ * /api/auth/login:
+ *   post:
+ *     summary: Iniciar sesión (Usuario / Psicólogo / Admin)
+ *     tags: [Auth]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - correo
+ *               - contrasena
+ *             properties:
+ *               correo:
+ *                 type: string
+ *                 example: usuario@test.com
+ *               contrasena:
+ *                 type: string
+ *                 example: "12345678"
+ *     responses:
+ *       200:
+ *         description: Login exitoso, retorna el Token JWT
  */
 router.post('/login', authController.login);
 
 /**
- * @route POST /api/auth/recover-password
- * @desc Recover and update user password
- * @access Public
+ * @swagger
+ * /api/auth/recover-password:
+ *   post:
+ *     summary: Recuperar contraseña
+ *     tags: [Auth]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - correo
+ *               - nuevaContrasena
+ *             properties:
+ *               correo:
+ *                 type: string
+ *                 example: usuario@test.com
+ *               nuevaContrasena:
+ *                 type: string
+ *                 example: nuevaClave123
+ *     responses:
+ *       200:
+ *         description: Contraseña actualizada correctamente
  */
 router.post('/recover-password', authController.recoverPassword);
 
