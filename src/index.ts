@@ -23,6 +23,9 @@ import { APISuccessResponse } from './shared/utils/api.utils';
 // IA
 import { initializeOllama } from './services/ollama.service';
 
+// SWAGGER
+import { setupSwagger } from './config/swagger';
+
 // ROUTES
 import authRoutes from './routes/auth.routes';
 import userRoutes from './routes/user.routes';
@@ -85,6 +88,9 @@ app.get('/health', (_: Request, res: Response) => {
 
 // Setup WebSocket
 setupWebSocket(io);
+
+// Setup Swagger UI Documentation
+setupSwagger(app);
 
 // Initialize database and start server
 const PORT = process.env.PORT || 3000;
