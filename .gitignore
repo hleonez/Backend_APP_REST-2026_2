@@ -34,3 +34,8 @@ yarn-error.log*
 # OS
 Thumbs.db
 .DS_Store
+
+# Postman local workspaces (carpetas auto-generadas con rutas muy largas)
+.postman/
+postman/
+
