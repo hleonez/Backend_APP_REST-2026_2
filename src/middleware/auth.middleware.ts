@@ -1,17 +1,20 @@
 // Libs
 import { Request, Response, NextFunction } from 'express';
+import { and, eq, isNull } from 'drizzle-orm';
 
 // Config
 import { verifyToken, JwtPayload } from '../config/jwt';
 
 // Constants
 import { ROLES } from '../shared/const/roles.const';
+import { db } from '../db';
+import { usuarios } from '../db/schema';
 
 export interface AuthRequest extends Request {
   user?: JwtPayload;
 }
 
-export const authenticate = (req: AuthRequest, res: Response, next: NextFunction): void => {
+export const authenticate = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const authHeader = req.headers.authorization;
     
@@ -20,7 +23,12 @@ export const authenticate = (req: AuthRequest, res: Response, next: NextFunction
       return;
     }
     
-    const token = authHeader.split(' ')[1];
+    const [scheme, token] = authHeader.trim().split(/\s+/);
+    if (scheme?.toLowerCase() !== 'bearer' || !token) {
+      res.status(401).json({ message: 'Invalid authorization header' });
+      return;
+    }
+
     const decoded = verifyToken(token);
     
     if (!decoded) {
@@ -28,6 +36,21 @@ export const authenticate = (req: AuthRequest, res: Response, next: NextFunction
       return;
     }
     
+    const [activeUser] = await db
+      .select({ id: usuarios.id })
+      .from(usuarios)
+      .where(and(
+        eq(usuarios.id, decoded.id),
+        isNull(usuarios.deleted_at),
+        eq(usuarios.is_active, true),
+      ))
+      .limit(1);
+
+    if (!activeUser) {
+      res.status(401).json({ message: 'Invalid or expired token' });
+      return;
+    }
+
     req.user = decoded;
     next();
   } catch (error) {

@@ -7,8 +7,16 @@ import { RoleNombre } from '../shared/types/roles.types';
 
 dotenv.config();
 
-const JWT_SECRET = process.env.JWT_SECRET || 'default-secret-key-change-in-production';
-const JWT_EXPIRE = '24h';
+const JWT_SECRET = process.env.JWT_SECRET?.trim();
+const JWT_EXPIRE = process.env.JWT_EXPIRES_IN?.trim();
+
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET is required');
+}
+
+if (!JWT_EXPIRE) {
+  throw new Error('JWT_EXPIRES_IN is required');
+}
 
 export interface JwtPayload {
   id: number;
@@ -17,7 +25,7 @@ export interface JwtPayload {
 }
 
 export const generateToken = (payload: JwtPayload): string => {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRE });
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRE as jwt.SignOptions['expiresIn'] });
 };
 
 export const verifyToken = (token: string): JwtPayload | null => {

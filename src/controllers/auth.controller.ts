@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import { generateToken } from '../config/jwt';
 import { z } from 'zod';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { db } from '../db';
 import { usuarios, roles } from '../db/schema';
 import { ROLES } from '../shared/const/roles.const';
@@ -26,19 +26,6 @@ const loginSchema = z.object({
   correo: z.string().email('Correo inválido'),
   contrasena: z.string(),
 });
-
-const recoverPasswordSchema = z
-  .object({
-    correo: z.string().email('Correo inválido'),
-    nuevaContrasena: z
-      .string()
-      .min(8, 'La contraseña debe tener al menos 8 caracteres'),
-    confirmarContrasena: z.string().min(8, 'Confirma la contraseña'),
-  })
-  .refine((data) => data.nuevaContrasena === data.confirmarContrasena, {
-    message: 'Las contraseñas no coinciden',
-    path: ['confirmarContrasena'],
-  });
 
 /**
  * Register a new user
@@ -67,7 +54,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       .limit(1);
 
     if (existingUser.length > 0) {
-      res.status(400).json({ message: 'El correo ya está registrado' });
+      res.status(409).json({ message: 'El correo ya está registrado' });
       return;
     }
 
@@ -81,7 +68,12 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       .where(eq(roles.nombre, ROLES.USUARIO.nombre))
       .limit(1);
 
-    const rolUsuarioId = usuarioRole?.id ?? null;
+    if (!usuarioRole) {
+      res.status(500).json({ message: 'El rol de usuario no está configurado' });
+      return;
+    }
+
+    const rolUsuarioId = usuarioRole.id;
 
     // Create user - aseguramos que todos los campos requeridos están explícitamente establecidos
     const [newUser] = await db.insert(usuarios)
@@ -154,11 +146,15 @@ export const login = async (req: Request, res: Response): Promise<void> => {
         id_rol: usuarios.id_rol,
       })
       .from(usuarios)
-      .where(eq(usuarios.correo, correoNormalizado))
+      .where(and(
+        eq(usuarios.correo, correoNormalizado),
+        isNull(usuarios.deleted_at),
+        eq(usuarios.is_active, true),
+      ))
       .limit(1);
 
     if (results.length === 0) {
-      res.status(404).json({ message: 'Usuario no encontrado' });
+      res.status(401).json({ message: 'Credenciales inválidas' });
       return;
     }
 
@@ -166,7 +162,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
     const passwordMatch = await bcrypt.compare(contrasena, user.contrasena);
     if (!passwordMatch) {
-      res.status(401).json({ message: 'Contraseña incorrecta' });
+      res.status(401).json({ message: 'Credenciales inválidas' });
       return;
     }
 
@@ -217,47 +213,8 @@ export const login = async (req: Request, res: Response): Promise<void> => {
  * Recover user password
  */
 export const recoverPassword = async (
-  req: Request,
+  _req: Request,
   res: Response,
 ): Promise<void> => {
-  try {
-    const validationResult = recoverPasswordSchema.safeParse(req.body);
-
-    if (!validationResult.success) {
-      res.status(400).json({
-        message: 'Datos inválidos',
-        errors: validationResult.error.errors,
-      });
-      return;
-    }
-
-    const { correo, nuevaContrasena } = validationResult.data;
-    const correoNormalizado = correo.toLowerCase().trim();
-
-    const userResult = await db
-      .select({ id: usuarios.id })
-      .from(usuarios)
-      .where(eq(usuarios.correo, correoNormalizado))
-      .limit(1);
-
-    if (userResult.length === 0) {
-      res.status(404).json({ message: 'Usuario no encontrado' });
-      return;
-    }
-
-    const hashedPassword = await bcrypt.hash(nuevaContrasena, 10);
-
-    await db
-      .update(usuarios)
-      .set({
-        contrasena: hashedPassword,
-        updated_at: new Date(),
-      })
-      .where(eq(usuarios.correo, correoNormalizado));
-
-    res.status(200).json({ message: 'Contraseña actualizada exitosamente' });
-  } catch (error) {
-    console.error('Error recovering password:', error);
-    res.status(500).json({ message: 'Error en el servidor' });
-  }
+  res.status(410).json({ message: 'La recuperación de contraseña no está disponible actualmente' });
 };
