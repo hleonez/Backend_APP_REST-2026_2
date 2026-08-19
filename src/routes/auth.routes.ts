@@ -3,6 +3,11 @@ import { Router } from 'express';
 
 // CONTROLLERS
 import * as authController from '../controllers/auth.controller';
+import {
+	loginRateLimiter,
+	passwordResetRateLimiter,
+	registerRateLimiter,
+} from '../middleware/rate-limit.middleware';
 
 const router = Router();
 
@@ -48,7 +53,7 @@ const router = Router();
  *       201:
  *         description: Usuario registrado exitosamente
  */
-router.post('/register', authController.register);
+router.post('/register', registerRateLimiter, authController.register);
 
 /**
  * @swagger
@@ -77,7 +82,7 @@ router.post('/register', authController.register);
  *       200:
  *         description: Login exitoso, retorna el Token JWT
  */
-router.post('/login', authController.login);
+router.post('/login', loginRateLimiter, authController.login);
 
 /**
  * @swagger
@@ -106,6 +111,6 @@ router.post('/login', authController.login);
  *       200:
  *         description: Contraseña actualizada correctamente
  */
-router.post('/recover-password', authController.recoverPassword);
+router.post('/recover-password', passwordResetRateLimiter, authController.recoverPassword);
 
 export default router; 

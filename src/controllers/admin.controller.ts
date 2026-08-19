@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { db } from '../db';
 import * as schema from '../db/schema';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, isNull, ne, sql } from 'drizzle-orm';
 import { usuarios } from '../db/schema';
 import bcrypt from 'bcrypt';
 import { registerSchema } from "./auth.controller";
@@ -24,15 +24,27 @@ export const registerPsychologist = async (req: Request, res: Response): Promise
     }
 
     const userData = validationResult.data;
+    const correoNormalizado = userData.correo.toLowerCase().trim();
 
     // Check if user already exists
     const existingUser = await db.select()
       .from(usuarios)
-      .where(eq(usuarios.correo, userData.correo))
+      .where(eq(usuarios.correo, correoNormalizado))
       .limit(1);
 
     if (existingUser.length > 0) {
-      res.status(400).json({ message: 'El correo ya está registrado' });
+      res.status(409).json({ message: 'El correo ya está registrado' });
+      return;
+    }
+
+    const [psychologistRole] = await db
+      .select({ id: schema.roles.id })
+      .from(schema.roles)
+      .where(and(eq(schema.roles.nombre, 'psicologo'), isNull(schema.roles.deleted_at)))
+      .limit(1);
+
+    if (!psychologistRole) {
+      res.status(500).json({ message: 'El rol de psicólogo no está configurado' });
       return;
     }
 
@@ -42,7 +54,7 @@ export const registerPsychologist = async (req: Request, res: Response): Promise
     // Create user - aseguramos que todos los campos requeridos están explícitamente establecidos
     const [newUser] = await db.insert(usuarios)
       .values({
-        correo: userData.correo,
+        correo: correoNormalizado,
         contrasena: hashedPassword,
         nombres: userData.nombres,
         apellidos: userData.apellidos,
@@ -50,7 +62,7 @@ export const registerPsychologist = async (req: Request, res: Response): Promise
         ciudad: userData.ciudad,
         edad: userData.edad,
         sexo: userData.sexo,
-        id_rol: 2
+        id_rol: psychologistRole.id
       })
       .returning({
         id: usuarios.id,
@@ -82,7 +94,11 @@ export const countUsuarios = async (req: AuthRequest, res: Response): Promise<vo
         total: sql<number>`count(*)`
       })
       .from(schema.usuarios)
-      .where(sql`id_rol in (2, 3)`) // Solo roles 2 (psicologo) y 3 (usuario)
+      .where(and(
+        sql`id_rol in (2, 3)`,
+        isNull(schema.usuarios.deleted_at),
+        eq(schema.usuarios.is_active, true),
+      )) // Solo roles 2 (psicologo) y 3 (usuario)
       .groupBy(schema.usuarios.id_rol);
 
     // Convertimos resultado a objeto más claro
@@ -110,7 +126,11 @@ export const getStudents = async (req: AuthRequest, res: Response): Promise<void
         correo: schema.usuarios.correo,
       })
       .from(schema.usuarios)
-      .where(eq(schema.usuarios.id_rol, 3));
+      .where(and(
+        eq(schema.usuarios.id_rol, 3),
+        isNull(schema.usuarios.deleted_at),
+        eq(schema.usuarios.is_active, true),
+      ));
 
     res.json(result);
   } catch (error) {
@@ -145,7 +165,11 @@ export const getStudentById = async (req: AuthRequest, res: Response): Promise<v
         fecha_nacimiento: schema.usuarios.fecha_nacimiento
       })
       .from(schema.usuarios)
-      .where(eq(schema.usuarios.id, Number(id)))
+      .where(and(
+        eq(schema.usuarios.id, Number(id)),
+        isNull(schema.usuarios.deleted_at),
+        eq(schema.usuarios.is_active, true),
+      ))
       .limit(1);
 
     if (!student) {
@@ -177,7 +201,11 @@ export const getPsychologists = async (req: AuthRequest, res: Response): Promise
         sexo: schema.usuarios.sexo
       })
       .from(schema.usuarios)
-      .where(eq(schema.usuarios.id_rol, 2));
+      .where(and(
+        eq(schema.usuarios.id_rol, 2),
+        isNull(schema.usuarios.deleted_at),
+        eq(schema.usuarios.is_active, true),
+      ));
 
     res.json(result);
   } catch (error) {
@@ -210,7 +238,11 @@ export const getPsychologistById = async (req: AuthRequest, res: Response): Prom
         sexo: schema.usuarios.sexo
       })
       .from(schema.usuarios)
-      .where(eq(schema.usuarios.id, Number(id)))
+      .where(and(
+        eq(schema.usuarios.id, Number(id)),
+        isNull(schema.usuarios.deleted_at),
+        eq(schema.usuarios.is_active, true),
+      ))
       .limit(1);
 
     if (!psychologist) {
@@ -232,19 +264,39 @@ export const updatePsychologist = async (req: AuthRequest, res: Response): Promi
   try {
     const { id } = req.params;
     const { nombres, apellidos, correo, telefono, edad, ciudad } = req.body;
+    const correoNormalizado = typeof correo === 'string' ? correo.toLowerCase().trim() : correo;
+
+    if (correoNormalizado) {
+      const [emailOwner] = await db.select({ id: schema.usuarios.id })
+        .from(schema.usuarios)
+        .where(and(
+          eq(schema.usuarios.correo, correoNormalizado),
+          ne(schema.usuarios.id, Number(id)),
+        ))
+        .limit(1);
+      if (emailOwner) {
+        res.status(409).json({ message: "El correo ya está registrado" });
+        return;
+      }
+    }
 
     const [updated] = await db
       .update(schema.usuarios)
       .set({
         nombres,
         apellidos,
-        correo,
+        correo: correoNormalizado,
         telefono,
         edad,
         ciudad,
         updated_at: new Date()
       })
-      .where(eq(schema.usuarios.id, Number(id)))
+      .where(and(
+        eq(schema.usuarios.id, Number(id)),
+        eq(schema.usuarios.id_rol, 2),
+        isNull(schema.usuarios.deleted_at),
+        eq(schema.usuarios.is_active, true),
+      ))
       .returning(); // devuelve el registro actualizado
 
     if (!updated) {
@@ -270,9 +322,15 @@ export const deletePsychologist = async (req: AuthRequest, res: Response): Promi
 
   try {
     const result = await db
-      .delete(schema.usuarios)
-      .where(eq(schema.usuarios.id, Number(id)))
-      .returning();
+      .update(schema.usuarios)
+      .set({ deleted_at: new Date(), is_active: false, updated_at: new Date() })
+      .where(and(
+        eq(schema.usuarios.id, Number(id)),
+        eq(schema.usuarios.id_rol, 2),
+        isNull(schema.usuarios.deleted_at),
+        eq(schema.usuarios.is_active, true),
+      ))
+      .returning({ id: schema.usuarios.id });
 
     if (result.length === 0) {
       res.status(404).json({ message: "Psicólogo no encontrado" });

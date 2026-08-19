@@ -3,7 +3,7 @@ import { z } from 'zod';
 import bcrypt from 'bcrypt';
 import { db } from '../db';
 import * as schema from '../db/schema';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull, ne } from 'drizzle-orm';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { APISuccessResponse, APIErrorResponse } from '../shared/utils/api.utils';
 
@@ -19,6 +19,11 @@ const userPatchSchema = userCreateSchema.partial();
 const streakCommitmentSchema = z.object({
   goal_days: z.number().int().min(1).max(365),
 });
+
+const activeUserCondition = () => and(
+  isNull(schema.usuarios.deleted_at),
+  eq(schema.usuarios.is_active, true),
+);
 
 const toDateOnlyString = (value: Date): string => value.toISOString().split('T')[0];
 
@@ -210,7 +215,8 @@ export const listUsers = async (_req: AuthRequest, res: Response): Promise<void>
         apellidos: schema.usuarios.apellidos,
         id_rol: schema.usuarios.id_rol,
       })
-      .from(schema.usuarios);
+      .from(schema.usuarios)
+      .where(activeUserCondition());
     res.json(users);
   } catch (error) {
     console.error('Error list users:', error);
@@ -223,12 +229,15 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
     const parsed = userCreateSchema.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ message: 'Datos inválidos', errors: parsed.error.errors }); return; }
     const data = parsed.data;
-    const [exists] = await db.select().from(schema.usuarios).where(eq(schema.usuarios.correo, data.correo)).limit(1);
+    const normalizedEmail = data.correo.toLowerCase().trim();
+    const [exists] = await db.select().from(schema.usuarios)
+      .where(eq(schema.usuarios.correo, normalizedEmail))
+      .limit(1);
     if (exists) { res.status(409).json({ message: 'El correo ya está registrado' }); return; }
     const hashed = await bcrypt.hash(data.contrasena, 10);
     const [created] = await db
       .insert(schema.usuarios)
-      .values({ nombres: data.nombres, apellidos: data.apellidos, correo: data.correo, contrasena: hashed })
+      .values({ nombres: data.nombres, apellidos: data.apellidos, correo: normalizedEmail, contrasena: hashed })
       .returning({ id: schema.usuarios.id, correo: schema.usuarios.correo, nombres: schema.usuarios.nombres, apellidos: schema.usuarios.apellidos });
     res.status(201).json(created);
   } catch (error) {
@@ -241,17 +250,28 @@ export const updateUserPut = async (req: AuthRequest, res: Response): Promise<vo
   try {
     const userId = Number(req.params.id);
     if (Number.isNaN(userId)) { res.status(400).json({ message: 'ID inválido' }); return; }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'id_rol')) {
+      res.status(403).json({ message: 'No puedes modificar el rol mediante esta operación' });
+      return;
+    }
     const parsed = userPutSchema.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ message: 'Datos inválidos', errors: parsed.error.errors }); return; }
     const data = parsed.data;
-    const [existing] = await db.select().from(schema.usuarios).where(eq(schema.usuarios.id, userId)).limit(1);
+    const normalizedEmail = data.correo.toLowerCase().trim();
+    const [emailOwner] = await db.select({ id: schema.usuarios.id })
+      .from(schema.usuarios)
+      .where(and(eq(schema.usuarios.correo, normalizedEmail), ne(schema.usuarios.id, userId)))
+      .limit(1);
+    if (emailOwner) { res.status(409).json({ message: 'El correo ya está registrado' }); return; }
+    const [existing] = await db.select().from(schema.usuarios).where(and(
+      eq(schema.usuarios.id, userId),
+      activeUserCondition(),
+    )).limit(1);
     if (!existing) { res.status(404).json({ message: 'Usuario no encontrado' }); return; }
-    // Access: psicólogo o dueño
-    if (req.user?.role !== 'psicologo' && req.user?.id !== userId) { res.status(403).json({ message: 'No autorizado' }); return; }
     const hashed = await bcrypt.hash(data.contrasena, 10);
     const [updated] = await db
       .update(schema.usuarios)
-      .set({ nombres: data.nombres, apellidos: data.apellidos, correo: data.correo, contrasena: hashed, updated_at: new Date() })
+      .set({ nombres: data.nombres, apellidos: data.apellidos, correo: normalizedEmail, contrasena: hashed, updated_at: new Date() })
       .where(eq(schema.usuarios.id, userId))
       .returning({ id: schema.usuarios.id, correo: schema.usuarios.correo, nombres: schema.usuarios.nombres, apellidos: schema.usuarios.apellidos });
     res.json(updated);
@@ -265,16 +285,30 @@ export const updateUserPatch = async (req: AuthRequest, res: Response): Promise<
   try {
     const userId = Number(req.params.id);
     if (Number.isNaN(userId)) { res.status(400).json({ message: 'ID inválido' }); return; }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'id_rol')) {
+      res.status(403).json({ message: 'No puedes modificar el rol mediante esta operación' });
+      return;
+    }
     const parsed = userPatchSchema.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ message: 'Datos inválidos', errors: parsed.error.errors }); return; }
-    const [existing] = await db.select().from(schema.usuarios).where(eq(schema.usuarios.id, userId)).limit(1);
+    const normalizedEmail = parsed.data.correo?.toLowerCase().trim();
+    if (normalizedEmail) {
+      const [emailOwner] = await db.select({ id: schema.usuarios.id })
+        .from(schema.usuarios)
+        .where(and(eq(schema.usuarios.correo, normalizedEmail), ne(schema.usuarios.id, userId)))
+        .limit(1);
+      if (emailOwner) { res.status(409).json({ message: 'El correo ya está registrado' }); return; }
+    }
+    const [existing] = await db.select().from(schema.usuarios).where(and(
+      eq(schema.usuarios.id, userId),
+      activeUserCondition(),
+    )).limit(1);
     if (!existing) { res.status(404).json({ message: 'Usuario no encontrado' }); return; }
-    if (req.user?.role !== 'psicologo' && req.user?.id !== userId) { res.status(403).json({ message: 'No autorizado' }); return; }
     const data = parsed.data;
     const payload: any = { updated_at: new Date() };
     if (data.nombres !== undefined) payload.nombres = data.nombres;
     if (data.apellidos !== undefined) payload.apellidos = data.apellidos;
-    if (data.correo !== undefined) payload.correo = data.correo;
+    if (normalizedEmail !== undefined) payload.correo = normalizedEmail;
     if (data.contrasena !== undefined) payload.contrasena = await bcrypt.hash(data.contrasena, 10);
     const [updated] = await db.update(schema.usuarios).set(payload).where(eq(schema.usuarios.id, userId)).returning({ id: schema.usuarios.id, correo: schema.usuarios.correo, nombres: schema.usuarios.nombres, apellidos: schema.usuarios.apellidos });
     res.json(updated);
@@ -288,10 +322,15 @@ export const deleteUser = async (req: AuthRequest, res: Response): Promise<void>
   try {
     const userId = Number(req.params.id);
     if (Number.isNaN(userId)) { res.status(400).json({ message: 'ID inválido' }); return; }
-    const [existing] = await db.select().from(schema.usuarios).where(eq(schema.usuarios.id, userId)).limit(1);
+    const [existing] = await db.select().from(schema.usuarios).where(and(
+      eq(schema.usuarios.id, userId),
+      activeUserCondition(),
+    )).limit(1);
     if (!existing) { res.status(404).json({ message: 'Usuario no encontrado' }); return; }
     if (req.user?.role !== 'psicologo') { res.status(403).json({ message: 'No autorizado' }); return; }
-    await db.delete(schema.usuarios).where(eq(schema.usuarios.id, userId));
+    await db.update(schema.usuarios)
+      .set({ deleted_at: new Date(), is_active: false, updated_at: new Date() })
+      .where(and(eq(schema.usuarios.id, userId), activeUserCondition()));
     res.json({ message: 'Usuario eliminado' });
   } catch (error) {
     console.error('Error delete user:', error);
@@ -299,14 +338,14 @@ export const deleteUser = async (req: AuthRequest, res: Response): Promise<void>
   }
 };
 
-export const getUserById = async (req: any, res: Response): Promise<void> => {
+export const getUserById = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.params.id;
 
     const [user] = await db
       .select()
       .from(schema.usuarios)
-      .where(eq(schema.usuarios.id, Number(userId)))
+      .where(and(eq(schema.usuarios.id, Number(userId)), activeUserCondition()))
       .limit(1);
 
     if (!user) {
@@ -314,7 +353,8 @@ export const getUserById = async (req: any, res: Response): Promise<void> => {
       return;
     }
     
-    res.json(user);
+    const { contrasena, ...safeUser } = user;
+    res.json(safeUser);
   } catch (error) {
     console.error('Error fetching user:', error);
     res.status(500).json({ message: 'Error en el servidor' });
@@ -334,7 +374,7 @@ export const getProfile = async (req: AuthRequest, res: Response): Promise<void>
     const [user] = await db
       .select()
       .from(schema.usuarios)
-      .where(eq(schema.usuarios.id, req.user.id as number))
+      .where(and(eq(schema.usuarios.id, req.user.id as number), activeUserCondition()))
       .limit(1);
     
     if (!user) {

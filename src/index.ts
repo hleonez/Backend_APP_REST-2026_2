@@ -47,16 +47,26 @@ dotenv.config();
 
 const app = express();
 const server = http.createServer(app);
+
+const corsOrigins = (process.env.CORS_ORIGINS || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+if (corsOrigins.length === 0) {
+  throw new Error('CORS_ORIGINS is required and must contain at least one origin');
+}
+
 const io = new SocketServer(server, {
   cors: {
-    origin: '*',
+    origin: corsOrigins,
     methods: ['GET', 'POST']
   }
 });
 
 // Middleware
 const corsOptions = {
-  origin: '*',
+  origin: corsOrigins,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 };
