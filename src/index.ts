@@ -57,16 +57,21 @@ if (corsOrigins.length === 0) {
   throw new Error('CORS_ORIGINS is required and must contain at least one origin');
 }
 
+const isAllowedOrigin = (origin?: string) =>
+  !origin ||
+  corsOrigins.includes(origin) ||
+  /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin);
+
 const io = new SocketServer(server, {
   cors: {
-    origin: corsOrigins,
+    origin: isAllowedOrigin,
     methods: ['GET', 'POST']
   }
 });
 
 // Middleware
 const corsOptions = {
-  origin: corsOrigins,
+  origin: isAllowedOrigin,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 };
@@ -105,41 +110,41 @@ setupSwagger(app);
 // Initialize database and start server
 const PORT = process.env.PORT || 3000;
 
-// Run migrations and seed data before starting the server
-async function initializeAndStartServer() {
+// Start the HTTP listener immediately and independently. The backend
+// initialization (migrations, seed, Ollama) runs in the background so it can
+// never freeze the event loop and leave the server unable to process requests.
+server.listen(PORT, () => {
+  console.log("\n*********************************************");
+  console.log(`* SERVIDOR (API) CORRIENDO EN EL PUERTO ${PORT} *`);
+  console.log("*********************************************\n");
+});
+server.on('error', (error) => {
+  console.error('Failed to start the server:', error);
+  process.exit(1);
+});
+
+// Run migrations, seed and Ollama initialization in the background
+void (async () => {
   try {
     console.log('Initializing database...');
-    
+
     // Run migrations to create tables if they don't exist
     await runMigrations();
-    
+
     // Seed basic data if needed
     await seed();
-    
-    // Initialize Ollama if enabled
-      try {
-        await initializeOllama();
-      } catch (ollamaError) {
-        console.warn('Warning: Could not initialize Ollama:', ollamaError);
-        console.log('Server will continue without Ollama support');
-      }
-    
-    // Start the server
-    server.listen(PORT, () => {
-      console.log("\n*********************************************");
-      console.log(`* SERVIDOR (API) CORRIENDO EN EL PUERTO ${PORT} *`);
-      console.log("*********************************************\n");
-
-      // console.log(`Health check available at http://localhost:${PORT}/health`);
-      // console.log(`AI Chat available at http://localhost:${PORT}/api/chats/ia`);
-      // console.log(`Advanced AI Chat available at http://localhost:${PORT}/api/chats/ia/avanzado`);
-    });
   } catch (error) {
-    console.error('Failed to initialize the server:', error);
+    console.error('Failed to initialize database:', error);
     process.exit(1);
   }
-}
 
-initializeAndStartServer();
+  // Initialize Ollama if enabled (must not freeze the server)
+  try {
+    await initializeOllama();
+  } catch (ollamaError) {
+    console.warn('Warning: Could not initialize Ollama:', ollamaError);
+    console.log('Server will continue without Ollama support');
+  }
+})();
 
 export default server;

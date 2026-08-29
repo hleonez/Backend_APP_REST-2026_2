@@ -292,6 +292,8 @@ export const checkOllamaHealth = async (): Promise<boolean> => {
  * Descarga el modelo si no está disponible
  */
 export const downloadModel = async (): Promise<boolean> => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 120000); // 2 minutos de timeout
   try {
     console.log(`Descargando modelo ${OLLAMA_MODEL}...`);
     const response = await fetch(`${OLLAMA_API_URL}/api/pull`, {
@@ -300,6 +302,7 @@ export const downloadModel = async (): Promise<boolean> => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ name: OLLAMA_MODEL }),
+      signal: controller.signal,
     });
 
     if (!response.ok) {
@@ -329,10 +332,16 @@ export const downloadModel = async (): Promise<boolean> => {
       }
     }
 
+    clearTimeout(timeout);
     console.log(`Modelo ${OLLAMA_MODEL} descargado exitosamente`);
     return true;
-  } catch (error) {
-    console.error('Error descargando modelo:', error);
+  } catch (error: any) {
+    clearTimeout(timeout);
+    if (error.name === 'AbortError') {
+      console.error('Timeout: la descarga del modelo tardó más de 2 minutos');
+    } else {
+      console.error('Error descargando modelo:', error);
+    }
     return false;
   }
 };
