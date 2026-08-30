@@ -8,14 +8,10 @@ import { RoleNombre } from '../shared/types/roles.types';
 dotenv.config();
 
 const JWT_SECRET = process.env.JWT_SECRET?.trim();
-const JWT_EXPIRE = process.env.JWT_EXPIRES_IN?.trim();
+const JWT_EXPIRE = process.env.JWT_EXPIRES_IN?.trim() || '24h';
 
 if (!JWT_SECRET) {
   throw new Error('JWT_SECRET is required');
-}
-
-if (!JWT_EXPIRE) {
-  throw new Error('JWT_EXPIRES_IN is required');
 }
 
 export interface JwtPayload {
