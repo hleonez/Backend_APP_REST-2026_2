@@ -10,6 +10,44 @@
       "name": "AUTH - Logins",
       "item": [
         {
+          "name": "Registro Usuario",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.token) {",
+                  "    pm.globals.set('token-usuario', jsonData.token);",
+                  "    pm.globals.set('usuarioId', jsonData.usuario?.id);",
+                  "    console.log('✅ Registro exitoso. Token Usuario guardado: ' + jsonData.token.substring(0,20) + '...');",
+                  "} else {",
+                  "    console.log('ℹ️ Registro completado (sin auto-login o revisa respuesta):', jsonData);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombres\": \"Samuel\",\n  \"apellidos\": \"León\",\n  \"correo\": \"samuel.leon@test.com\",\n  \"contrasena\": \"12345678\",\n  \"telefono\": \"1111111\",\n  \"ciudad\": \"UniLibre\",\n  \"edad\": 20\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/auth/register",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "auth", "register"]
+            }
+          }
+        },
+        {
           "name": "Login Admin",
           "event": [
             {
@@ -112,7 +150,12 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"correo\":\"usuario@test.com\",\"contrasena\":\"12345678\"}"
+              "raw": "{\n  \"correo\": \"samuel.leon@test.com\",\n  \"contrasena\": \"12345678\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "http://localhost:3000/api/auth/login",
@@ -423,37 +466,201 @@
       ]
     },
     {
-      "name": "EXTRAS: Chat Management",
+      "name": "MÓDULO DOCUMENTACIÓN (Escenarios a probar)",
       "item": [
         {
-          "name": "GET Lista de Chats",
+          "name": "Diario - Escenario 1 (Creación exitosa)",
           "request": {
-            "method": "GET",
+            "method": "POST",
             "header": [
-              {"key": "Authorization", "value": "Bearer {{token-usuario}}"}
+              {"key": "Authorization", "value": "Bearer {{token-usuario}}"},
+              {"key": "Content-Type", "value": "application/json"}
             ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titulo\": \"Un día difícil\",\n  \"contenido\": \"Hoy tuve mucho estrés en el trabajo...\",\n  \"fecha\": \"2026-08-13T00:00:00.000Z\"\n}",
+              "options": {"raw": {"language": "json"}}
+            },
             "url": {
-              "raw": "http://localhost:3000/api/chats",
+              "raw": "http://localhost:3000/api/diario",
               "protocol": "http",
               "host": ["localhost"],
               "port": "3000",
-              "path": ["api", "chats"]
+              "path": ["api", "diario"]
             }
           }
         },
         {
-          "name": "GET Chat por ID",
+          "name": "Diario - Escenario 2 (Contenido vacío - 400)",
           "request": {
-            "method": "GET",
+            "method": "POST",
             "header": [
-              {"key": "Authorization", "value": "Bearer {{token-usuario}}"}
+              {"key": "Authorization", "value": "Bearer {{token-usuario}}"},
+              {"key": "Content-Type", "value": "application/json"}
             ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titulo\": \"Un día difícil\",\n  \"contenido\": \"\",\n  \"fecha\": \"2026-08-13T00:00:00.000Z\"\n}",
+              "options": {"raw": {"language": "json"}}
+            },
             "url": {
-              "raw": "http://localhost:3000/api/chats/{{chatId}}",
+              "raw": "http://localhost:3000/api/diario",
               "protocol": "http",
               "host": ["localhost"],
               "port": "3000",
-              "path": ["api", "chats", "{{chatId}}"]
+              "path": ["api", "diario"]
+            }
+          }
+        },
+        {
+          "name": "Diario - Escenario 3 (Sin Token - 401)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titulo\": \"Un día difícil\",\n  \"contenido\": \"Texto de prueba\"\n}",
+              "options": {"raw": {"language": "json"}}
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/diario",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "diario"]
+            }
+          }
+        },
+        {
+          "name": "Registro Emocional - Escenario 1 (Exitoso 201)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token-usuario}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usuario_id\": {{usuarioId}},\n  \"respuestas\": [\n    {\"pregunta_id\": 1, \"opcion_id\": 2}\n  ]\n}",
+              "options": {"raw": {"language": "json"}}
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/registro-emocional",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "registro-emocional"]
+            }
+          }
+        },
+        {
+          "name": "Registro Emocional - Escenario 2 (Cuerpo sin respuestas - 400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token-usuario}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usuario_id\": {{usuarioId}},\n  \"respuestas\": []\n}",
+              "options": {"raw": {"language": "json"}}
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/registro-emocional",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "registro-emocional"]
+            }
+          }
+        },
+        {
+          "name": "Registro Emocional - Escenario 3 (Usuario no coincide / Prohibido - 403)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token-usuario}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usuario_id\": 99999,\n  \"respuestas\": [\n    {\"pregunta_id\": 1, \"opcion_id\": 2}\n  ]\n}",
+              "options": {"raw": {"language": "json"}}
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/registro-emocional",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "registro-emocional"]
+            }
+          }
+        },
+        {
+          "name": "Chat IA - Escenario 1 (Exitoso 201)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token-usuario}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mensaje\": \"Hoy me he sentido un poco triste\"\n}",
+              "options": {"raw": {"language": "json"}}
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/chats/ia",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "chats", "ia"]
+            }
+          }
+        },
+        {
+          "name": "Chat IA - Escenario 2 (Mensaje vacío - 400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{token-usuario}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mensaje\": \"\"\n}",
+              "options": {"raw": {"language": "json"}}
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/chats/ia",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "chats", "ia"]
+            }
+          }
+        },
+        {
+          "name": "Chat IA - Escenario 3 (Sin Token - 401)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mensaje\": \"Hola\"\n}",
+              "options": {"raw": {"language": "json"}}
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/chats/ia",
+              "protocol": "http",
+              "host": ["localhost"],
+              "port": "3000",
+              "path": ["api", "chats", "ia"]
             }
           }
         }
