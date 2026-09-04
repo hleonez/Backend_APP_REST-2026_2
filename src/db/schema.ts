@@ -488,6 +488,57 @@ export const mensajes_chat_usuariosrelations = relations(mensajes_chat, ({ one }
 }));
 
 // ================================
+// ASIGNACIONES (Estudiante ↔ Psicólogo)
+// ================================
+
+export const asignaciones = pgTable('asignaciones', {
+  id: serial('id').primaryKey(),
+
+  estudiante_id: integer('estudiante_id')
+    .references(() => usuarios.id, { onDelete: 'set null' }),
+
+  psicologo_id: integer('psicologo_id')
+    .references(() => usuarios.id, { onDelete: 'set null' }),
+
+  estado: varchar('estado', { length: 30 }).default('pendiente').notNull(),
+  mensaje: text('mensaje'),
+
+  solicitado_en: timestamp('solicitado_en').defaultNow().notNull(),
+  procesado_en: timestamp('procesado_en'),
+  finalizado_en: timestamp('finalizado_en'),
+
+  created_at: timestamp('created_at').defaultNow().notNull(),
+  updated_at: timestamp('updated_at').defaultNow().notNull(),
+  deleted_at: timestamp('deleted_at'),
+}, (t) => ({
+  idxAsignacionesEstudianteId: index('idx_asignaciones_estudiante_id').on(t.estudiante_id),
+  idxAsignacionesPsicologoId: index('idx_asignaciones_psicologo_id').on(t.psicologo_id),
+
+  // UNIQUE parcial: máximo 1 asignación activa (aprobada) por estudiante
+  uqAsignacionesEstudianteAprobado: uniqueIndex('uq_asignaciones_estudiante_aprobado')
+    .on(t.estudiante_id)
+    .where(sql`estado = 'aprobado' AND deleted_at IS NULL`),
+
+  // UNIQUE parcial: evitar solicitudes pendientes duplicadas al mismo psicólogo
+  uqAsignacionesEstudiantePsicologoPendiente: uniqueIndex('uq_asignaciones_estudiante_psicologo_pendiente')
+    .on(t.estudiante_id, t.psicologo_id)
+    .where(sql`estado = 'pendiente' AND deleted_at IS NULL`),
+}));
+
+export const asignacionesrelations = relations(asignaciones, ({ one }) => ({
+  estudiante: one(usuarios, {
+    fields: [asignaciones.estudiante_id],
+    references: [usuarios.id],
+    relationName: 'asignacionesComoEstudiante',
+  }),
+  psicologo: one(usuarios, {
+    fields: [asignaciones.psicologo_id],
+    references: [usuarios.id],
+    relationName: 'asignacionesComoPsicologo',
+  }),
+}));
+
+// ================================
 // DIARIO
 // ================================
 

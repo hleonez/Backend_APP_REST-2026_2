@@ -48,6 +48,8 @@ preguntas_registro_emocional (1) ---< registro_emocional (N)
 opciones_registro_emocional (1) ---< registro_emocional (N)
 opciones_registro_actividades (1) ---< registro_actividades_usuarios (N)
 premios (1) ---< solicitudes_premios (N)
+usuarios (1) ---< asignaciones (estudiante_id) (N)
+usuarios (1) ---< asignaciones (psicologo_id) (N)
 ```
 
 ---
@@ -521,6 +523,36 @@ Almacena contenido textual dinámico de la aplicación: términos y condiciones,
 
 ---
 
+### 22. `asignaciones`
+
+Relación N:N con historial entre estudiantes y psicólogos. Cada registro representa una solicitud de atención psicológica con su ciclo de vida (pendiente → aprobado/rechazado → finalizado).
+
+| Campo | Tipo | Restricciones | Por Defecto |
+|---|---|---|---|
+| `id` | `serial` | PK | auto-increment |
+| `estudiante_id` | `integer` | FK → `usuarios.id` | nullable |
+| `psicologo_id` | `integer` | FK → `usuarios.id` | nullable |
+| `estado` | `varchar(30)` | NOT NULL | `'pendiente'` |
+| `mensaje` | `text` | nullable | — |
+| `solicitado_en` | `timestamp` | NOT NULL | `now()` |
+| `procesado_en` | `timestamp` | nullable | — |
+| `finalizado_en` | `timestamp` | nullable | — |
+| `created_at` | `timestamp` | NOT NULL | `now()` |
+| `updated_at` | `timestamp` | NOT NULL | `now()` |
+| `deleted_at` | `timestamp` | nullable | — |
+
+**Estados válidos:** `pendiente`, `aprobado`, `rechazado`, `finalizado`
+
+**Índices:** `idx_asignaciones_estudiante_id`, `idx_asignaciones_psicologo_id`
+
+**Índices únicos parciales:**
+- `uq_asignaciones_estudiante_aprobado` — `UNIQUE (estudiante_id) WHERE estado = 'aprobado' AND deleted_at IS NULL` — Máximo 1 asignación activa por estudiante.
+- `uq_asignaciones_estudiante_psicologo_pendiente` — `UNIQUE (estudiante_id, psicologo_id) WHERE estado = 'pendiente' AND deleted_at IS NULL` — Sin solicitudes pendientes duplicadas al mismo psicólogo.
+
+**Regla de negocio (validada en servicio):** `estudiante_id !== psicologo_id`
+
+---
+
 ## Resumen de Índices
 
 ### Índices B-tree
@@ -551,6 +583,8 @@ Almacena contenido textual dinámico de la aplicación: términos y condiciones,
 | `diario` | `idx_diario_usuario_id` | `usuario_id` |
 | `feedback` | `idx_feedback_usuario_id` | `usuario_id` |
 | `fallas_tecnicas` | `idx_fallas_tecnicas_usuario_id` | `usuario_id` |
+| `asignaciones` | `idx_asignaciones_estudiante_id` | `estudiante_id` |
+| `asignaciones` | `idx_asignaciones_psicologo_id` | `psicologo_id` |
 
 ### Índices Únicos
 
@@ -559,6 +593,13 @@ Almacena contenido textual dinámico de la aplicación: términos y condiciones,
 | `preguntas_registro_emocional` | `uq_preguntas_registro_emocional_texto` | `texto` |
 | `registro_emocional` | `uq_registro_emocional_usuario_pregunta_fecha_dia` | `(usuario_id, pregunta_id, fecha_dia)` |
 | `premios` | `uq_premios_nombre` | `nombre` |
+
+### Índices Únicos Parciales
+
+| Tabla | Nombre del Índice | Columnas | Condición WHERE |
+|---|---|---|---|
+| `asignaciones` | `uq_asignaciones_estudiante_aprobado` | `estudiante_id` | `estado = 'aprobado' AND deleted_at IS NULL` |
+| `asignaciones` | `uq_asignaciones_estudiante_psicologo_pendiente` | `(estudiante_id, psicologo_id)` | `estado = 'pendiente' AND deleted_at IS NULL` |
 
 ### Restricciones UNIQUE (sin índice explícito en Drizzle)
 
@@ -586,7 +627,7 @@ Almacena contenido textual dinámico de la aplicación: términos y condiciones,
 
 | Propósito | Ruta |
 |---|---|
-| Esquema completo de la BD (21 tablas) | `src/db/schema.ts` |
+| Esquema completo de la BD (22 tablas) | `src/db/schema.ts` |
 | Conexión y configuración de Drizzle ORM | `src/db/index.ts` |
 | Script de migraciones | `src/db/migrate.ts` |
 | Datos semilla | `src/db/seed.ts` |
