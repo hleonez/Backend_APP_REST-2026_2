@@ -3,6 +3,12 @@
  * Genera respuestas más naturales, variadas y personalizadas
  */
 
+import {
+  REGLAS_GLOBALES_ESTILOS,
+  obtenerEstiloPorId,
+  type EstiloRespuestaId,
+} from '../shared/const/estilos-respuesta.const';
+
 interface ContextoPerfil {
   emociones_frecuentes?: string[];
   temas_recurrentes?: string[];
@@ -15,7 +21,7 @@ interface ContextoPerfil {
  * Genera un system prompt dinámico basado en el perfil del usuario
  * MUCHO MÁS NATURAL y menos robótico que el anterior
  */
-export const construirPromptDinamico = (contexto?: ContextoPerfil): string => {
+export const construirPromptDinamico = (contexto?: ContextoPerfil, estiloId?: EstiloRespuestaId): string => {
   const tieneHistorial = contexto?.tiene_historial;
   const emociones = contexto?.emociones_frecuentes || [];
   const temas = contexto?.temas_recurrentes || [];
@@ -90,53 +96,105 @@ LARGO DE RESPUESTAS:
 - Nunca paredes de texto
 - Si necesitas decir mucho, divídelo en párrafos naturales`;
 
+  // Estilo de respuesta elegido por el selector determinista (Fase 3).
+  // Las especificaciones obligatorias y prohibiciones del estilo activo
+  // forman parte del system prompt, tal como lo define el catálogo.
+  if (estiloId) {
+    const estilo = obtenerEstiloPorId(estiloId);
+
+    prompt += `\n\nESTILO DE RESPUESTA ACTIVO: ${estilo.nombre}`;
+
+    if (estilo.especificaciones_obligatorias.length > 0) {
+      prompt += `\nESPECIFICACIONES OBLIGATORIAS PARA ESTE ESTILO:`;
+      estilo.especificaciones_obligatorias.forEach((espec) => {
+        prompt += `\n- ${espec}`;
+      });
+    }
+
+    if (estilo.prohibiciones_extra.length > 0) {
+      prompt += `\nPROHIBICIONES ADICIONALES PARA ESTE ESTILO:`;
+      estilo.prohibiciones_extra.forEach((prohibicion) => {
+        prompt += `\n- ${prohibicion}`;
+      });
+    }
+
+    prompt += `\nLongitud objetivo para este estilo: entre ${estilo.longitud_palabras.min} y ${estilo.longitud_palabras.max} palabras.`;
+  }
+
+  // Reglas globales (Fase 3): se mantienen y se refuerzan siempre,
+  // independientemente del estilo elegido.
+  prompt += `\n\nREGLAS GLOBALES (siempre aplican, sin excepción):`;
+  REGLAS_GLOBALES_ESTILOS.forEach((regla) => {
+    prompt += `\n- ${regla}`;
+  });
+
   return prompt;
 };
 
 /**
- * Diferentes "estilos" de respuesta para variar
- * El modelo elige uno según el contexto
+ * Variantes de fraseo por estilo de respuesta (Fase 3).
+ *
+ * IMPORTANTE: esto ya NO decide el estilo (eso lo hace el selector
+ * determinista en `selector-estilo.service.ts`, evaluando sentimiento,
+ * semáforo, perfil, etc.). `numeroMensaje` se usa únicamente para variar
+ * el fraseo dentro del estilo ya elegido y para debugging, reemplazando
+ * la anterior rotación `numeroMensaje % 6`.
  */
-export const obtenerEstiloRespuesta = (numeroMensaje: number = 0): string => {
-  const estilos = [
-    // Estilo 1: Pregunta provocadora
-    `Responde con una pregunta que le haga pensar diferente sobre su situación. 
-    Valida brevemente, luego pregunta algo inesperado pero relevante.`,
-
-    // Estilo 2: Datos curiosos + consejo
-    `Comparte algo interesante o un pequeño dato curioso que sea relevante.
-    Conéctalo con su situación y luego ofrece una acción concreta.`,
-
-    // Estilo 3: Validación pura + pregunta abierta
-    `Solo valida lo que siente (1 frase). No des consejos.
-    Haz una pregunta abierta que lo invite a profundizar más.`,
-
-    // Estilo 4: Acción inmediata + perspectiva
-    `Ofrece una pequeña acción que pueda hacer HOY (no mañana).
-    Dale una perspectiva diferente de su situación.`,
-
-    // Estilo 5: Honestidad genuina
-    `Sé honesto sobre lo que probablemente está pasando.
-    No dramatices, pero tampoco minimices. Ofrece una pregunta de apoyo.`,
-
-    // Estilo 6: Desafío amistoso
-    `Haz una observación gentil sobre lo que está diciendo.
-    Invítalo a ver su situación desde otro ángulo.`,
-  ];
-
-  return estilos[numeroMensaje % estilos.length];
+const VARIANTES_POR_ESTILO: Record<EstiloRespuestaId, string[]> = {
+  crisis_derivacion: [
+    `Valida brevemente lo que siente y comunica con calma que ya se está conectando con apoyo profesional inmediato (Salvavidas).`,
+  ],
+  contencion_emocional: [
+    `Valida lo que siente en la primera frase y acompaña sin apresurar consejos ni soluciones.`,
+    `Sostén el momento con calma: nombra la emoción y deja espacio antes de sugerir cualquier acción.`,
+    `Reconoce el peso de lo que describe y pregunta con delicadeza qué necesita ahora mismo.`,
+  ],
+  apoyo_practico: [
+    `Valida brevemente y ofrece una acción pequeña y concreta que pueda hacer hoy mismo.`,
+    `Reconoce la dificultad y propone un siguiente paso claro, sin sobrecargar con múltiples consejos.`,
+  ],
+  orientacion_por_dominio: [
+    `Nombra el área específica que le está pesando y ofrece una perspectiva o acción enfocada en ese dominio.`,
+    `Conecta tu respuesta directamente con esa área de su vida, sin generalizar a otros temas.`,
+  ],
+  refuerzo_positivo: [
+    `Celebra genuinamente lo que comparte y pregunta qué hizo bien para que se repita.`,
+    `Reconoce el logro con entusiasmo auténtico e invita a profundizar en cómo se sintió.`,
+  ],
+  conversacion_neutral: [
+    `Haz una pregunta abierta que lo invite a contar más sobre lo que menciona.`,
+    `Comparte una observación breve y curiosa relacionada con lo que cuenta, luego pregunta.`,
+    `Valida con una frase corta y deja espacio con una pregunta genuina.`,
+  ],
+  check_in_seguimiento: [
+    `Reconoce el tiempo que ha pasado sin sonar acusatorio y pregunta abiertamente cómo ha estado.`,
+    `Da la bienvenida de vuelta con calidez y pregunta qué ha pasado desde la última vez que hablaron.`,
+  ],
 };
 
 /**
- * Construye el prompt final para Ollama con variación
+ * Devuelve la instrucción de fraseo para el estilo ya elegido por el
+ * selector determinista. `numeroMensaje` solo elige la variante dentro
+ * del estilo (no el estilo en sí).
+ */
+export const obtenerEstiloRespuesta = (estiloId: EstiloRespuestaId, numeroMensaje: number = 0): string => {
+  const variantes = VARIANTES_POR_ESTILO[estiloId] ?? VARIANTES_POR_ESTILO.conversacion_neutral;
+  return variantes[numeroMensaje % variantes.length];
+};
+
+/**
+ * Construye el prompt final para Ollama a partir del estilo elegido por
+ * el selector determinista (`elegirEstilo`), con variación de fraseo
+ * dada por `numeroMensaje`.
  */
 export const construirPromptFinal = (
   mensaje: string,
   systemPrompt: string,
+  estiloId: EstiloRespuestaId,
   numeroMensaje: number = 0,
   contextoReciente?: string,
 ): { system: string; user: string } => {
-  const estiloActual = obtenerEstiloRespuesta(numeroMensaje);
+  const estiloActual = obtenerEstiloRespuesta(estiloId, numeroMensaje);
 
   let userPrompt = `${estiloActual}\n\nMensaje del usuario: ${mensaje}`;
 

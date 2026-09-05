@@ -7,6 +7,8 @@ import { AuthRequest } from '../middleware/auth.middleware';
 import { chatWithOllama } from '../services/ollama.service';
 import { APISuccessResponse, APIErrorResponse } from '../shared/utils/api.utils';
 import { analizarSentimiento, type SentimientoResultado } from '../services/sentimiento.service';
+import { elegirEstilo } from '../services/selector-estilo.service';
+import { analizarPatronesEmocionales } from '../services/user-profile.service';
 
 // Validation schema for messages
 const mensajeSchema = z.object({
@@ -189,6 +191,9 @@ const obtenerHistorialReciente = async (chatId: number, limit: number = 6): Prom
 
   return resumen;
 };
+
+const normalizarSemaforo = (valor?: string | null): 'verde' | 'amarillo' | 'rojo' | undefined =>
+  valor === 'verde' || valor === 'amarillo' || valor === 'rojo' ? valor : undefined;
 
 const detectarAlertaCritica = (mensaje: string) => {
   const mensajeNormalizado = normalizarTexto(mensaje);
@@ -505,6 +510,37 @@ export const chatConIA = async (req: AuthRequest, res: Response): Promise<void> 
         );
       }
 
+      // --- Fase 3: selección determinista de estilo ---
+      const [evaluacion, perfil, ultimosRegistros] = await Promise.all([
+        obtenerUltimaEvaluacion(req.user.id),
+        analizarPatronesEmocionales(req.user.id),
+        obtenerRegistrosEmocionales(req.user.id, 5),
+      ]);
+
+      const onboarding = !evaluacion;
+
+      const estilo = elegirEstilo({
+        sentimiento: { label: sentimiento.label, confianza: sentimiento.confianza },
+        semaforo: normalizarSemaforo(evaluacion?.estado_semaforo),
+        // No existe todavia un clasificador de dominio (academico, sueno,
+        // social, etc.); se deja sin valor hasta que se implemente en una
+        // futura iteracion.
+        subcategoria: undefined,
+        perfil: {
+          emociones_frecuentes: perfil.emociones_frecuentes,
+          temas_recurrentes: perfil.temas_recurrentes,
+          patrones_comportamiento: perfil.patrones_comportamiento,
+          dias_sin_comunicacion: perfil.dias_sin_comunicacion,
+          tiene_historial: perfil.emociones_frecuentes.length > 0,
+        },
+        ultimosRegistros,
+        onboarding,
+      });
+
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`[NOA DEBUG] Estilo elegido=${estilo} (mensaje #${numeroMensaje})`);
+      }
+
       // Incorporar el sentimiento detectado al contexto que recibe la IA.
       const contextoConSentimiento = sentimiento.origen === 'encoder'
         ? `${historialReciente}${historialReciente ? ' | ' : ''}Sentimiento detectado en el ultimo mensaje del usuario: ${sentimiento.label} (confianza ${sentimiento.confianza.toFixed(2)}).`
@@ -516,7 +552,8 @@ export const chatConIA = async (req: AuthRequest, res: Response): Promise<void> 
           contexto: contextoConSentimiento,
           modo,
           userId: req.user.id, // Pasar userId para perfil
-          numeroMensaje, // Pasar para variación de estilos
+          numeroMensaje, // Solo para debugging y variacion de fraseo dentro del estilo
+          estilo, // Estilo elegido por el selector determinista (Fase 3)
         }),
         new Promise((_, reject) => 
           setTimeout(() => reject(new Error('Timeout')), 70000)
