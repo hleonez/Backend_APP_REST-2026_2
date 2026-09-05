@@ -6,6 +6,7 @@ import * as schema from '../db/schema';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { chatWithOllama } from '../services/ollama.service';
 import { APISuccessResponse, APIErrorResponse } from '../shared/utils/api.utils';
+import { analizarSentimiento, type SentimientoResultado } from '../services/sentimiento.service';
 
 // Validation schema for messages
 const mensajeSchema = z.object({
@@ -241,6 +242,12 @@ const guardarInteraccionIA = async (params: {
   usuarioId: number;
   mensajeUsuario: string;
   respuestaIA: string;
+  /**
+   * Resultado del analisis de sentimiento (Fase 2) del mensaje del
+   * estudiante. Opcional: si no se provee (p. ej. el flujo de crisis, que
+   * nunca depende del encoder), el mensaje se guarda sin estos campos.
+   */
+  sentimientoUsuario?: SentimientoResultado;
 }) => {
   await db.insert(schema.mensajes_chat).values([
     {
@@ -248,6 +255,13 @@ const guardarInteraccionIA = async (params: {
       usuario_id: params.usuarioId,
       mensaje: params.mensajeUsuario,
       enviado_en: new Date(),
+      ...(params.sentimientoUsuario
+        ? {
+            sentimiento: params.sentimientoUsuario.label,
+            confianza: params.sentimientoUsuario.confianza.toFixed(3),
+            sentimiento_scores: params.sentimientoUsuario.scores,
+          }
+        : {}),
     },
     {
       chat_id: params.chatId,
@@ -479,10 +493,27 @@ export const chatConIA = async (req: AuthRequest, res: Response): Promise<void> 
       
       const numeroMensaje = totalMensajesChat.length;
 
+      // --- Fase 2: análisis de sentimiento (Robertuito) ---
+      // Ocurre DESPUÉS de la capa de crisis (ya resuelta arriba, con
+      // return temprano) y ANTES de generar la respuesta. Nunca lanza:
+      // ante timeout/falla del encoder devuelve un fallback seguro.
+      const sentimiento = await analizarSentimiento(mensaje);
+
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(
+          `[NOA DEBUG] Sentimiento label=${sentimiento.label};confianza=${sentimiento.confianza.toFixed(3)};origen=${sentimiento.origen} (usuario ${req.user.id})`,
+        );
+      }
+
+      // Incorporar el sentimiento detectado al contexto que recibe la IA.
+      const contextoConSentimiento = sentimiento.origen === 'encoder'
+        ? `${historialReciente}${historialReciente ? ' | ' : ''}Sentimiento detectado en el ultimo mensaje del usuario: ${sentimiento.label} (confianza ${sentimiento.confianza.toFixed(2)}).`
+        : historialReciente;
+
       const respuestaIA = await Promise.race([
         chatWithOllama({
           mensaje,
-          contexto: historialReciente, // Ahora solo historial, sin contexto hardcodeado
+          contexto: contextoConSentimiento,
           modo,
           userId: req.user.id, // Pasar userId para perfil
           numeroMensaje, // Pasar para variación de estilos
@@ -497,6 +528,7 @@ export const chatConIA = async (req: AuthRequest, res: Response): Promise<void> 
         usuarioId: req.user.id,
         mensajeUsuario: mensaje,
         respuestaIA: respuestaIA.respuesta,
+        sentimientoUsuario: sentimiento,
       });
 
       res.status(201).json(APISuccessResponse({
