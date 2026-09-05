@@ -1,0 +1,64 @@
+name: Branch Policy
+
+# Refuerza la convención de ramas del repositorio:
+#
+#   feature/*  -> develop   (todo el trabajo nuevo)
+#   develop    -> main      (release)
+#   main       -> develop   (SOLO el PR automático de sync-develop.yml,
+#                             identificado por su autor github-actions[bot])
+#
+# Cualquier otra combinación de base/head hacia `main` o `develop` falla
+# este check y bloquea el merge (si la rama está protegida con este check
+# como requerido).
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, edited, ready_for_review]
+    branches:
+      - main
+      - develop
+
+permissions:
+  contents: read
+
+jobs:
+  check-branch-policy:
+    name: Validar origen/destino del PR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validar convención de ramas
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          echo "PR: $HEAD_REF -> $BASE_REF (autor: $PR_AUTHOR)"
+
+          if [ "$BASE_REF" = "main" ]; then
+            if [ "$HEAD_REF" = "develop" ]; then
+              echo "OK: develop -> main es la única vía permitida hacia main."
+              exit 0
+            fi
+            echo "BLOQUEADO: main solo acepta Pull Requests desde 'develop'."
+            echo "Rama recibida: '$HEAD_REF'. Crea tu feature branch desde develop y fusiona ahí primero."
+            exit 1
+          fi
+
+          if [ "$BASE_REF" = "develop" ]; then
+            if [[ "$HEAD_REF" == feature/* ]]; then
+              echo "OK: rama feature/* -> develop permitida."
+              exit 0
+            fi
+
+            if [ "$HEAD_REF" = "main" ] && [ "$PR_AUTHOR" = "github-actions[bot]" ]; then
+              echo "OK: PR automático de sincronización main -> develop (github-actions[bot])."
+              exit 0
+            fi
+
+            echo "BLOQUEADO: develop solo acepta Pull Requests desde ramas 'feature/*'"
+            echo "o el PR automático de sincronización main -> develop creado por Actions."
+            echo "Rama recibida: '$HEAD_REF' (autor: '$PR_AUTHOR')."
+            exit 1
+          fi
+
+          echo "BLOQUEADO: rama base no reconocida por la política ('$BASE_REF')."
+          exit 1

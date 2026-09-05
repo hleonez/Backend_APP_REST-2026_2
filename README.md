@@ -190,3 +190,17 @@ docker compose restart app # Reiniciar la api
 docker compose down -v
 docker compose up -d --build
 ```
+
+## GitHub Actions (CI + convención de ramas)
+El repositorio usa GitHub Actions para validar el build en cada Pull
+Request y para mantener `develop` sincronizada con `main` después de cada
+release. La convención de ramas es:
+
+```
+feature/*  -->  develop   (todo el trabajo nuevo)
+develop    -->  main      (release)
+main       -->  develop   (solo el PR automático de sincronización)
+```
+
+Ver la guía completa de activación (permisos, protección de ramas, checks
+obligatorios) en [`docs/github-actions.md`](docs/github-actions.md).
