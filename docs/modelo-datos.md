@@ -41,6 +41,7 @@ usuarios (1) ---< mensajes_chat (N)
 chats (1) ---< mensajes_chat (N)
 evaluaciones (1) ---< respuestas (N)
 evaluaciones (1) ---< evaluaciones_respuestas_usuarios (N)
+evaluaciones (1) ---< semaforo_dimensiones (N)
 preguntas (1) ---< respuestas (N)
 encuestas (1) ---< encuestas_respuestas (N)
 preguntas_registro_emocional (1) ---< opciones_registro_emocional (N)
@@ -123,6 +124,7 @@ Evaluaciones psicológicas que genera el sistema de semáforo emocional. Núcleo
 | `puntaje_total` | `integer` | nullable | — |
 | `estado_semaforo` | `varchar(50)` | nullable (`verde`, `amarillo`, `rojo`) | — |
 | `observaciones` | `text` | nullable | — |
+| `subcategoria_principal` | `varchar(80)` | nullable (Fase 5, formato `<color>_<dimension>`) | — |
 | `created_at` | `timestamp` | NOT NULL | `now()` |
 | `updated_at` | `timestamp` | NOT NULL | `now()` |
 | `deleted_at` | `timestamp` | nullable | — |
@@ -134,6 +136,14 @@ Evaluaciones psicológicas que genera el sistema de semáforo emocional. Núcleo
 - **Verde** (estable): puntaje < 40
 - **Amarillo** (precaución): puntaje ≥ 40 y < 70
 - **Rojo** (alerta): puntaje ≥ 70
+
+**Fase 5 — Dimensiones:** además del color global, cada evaluación calcula un
+puntaje y nivel por dimensión (ver tabla `semaforo_dimensiones`). La dimensión
+con peor nivel (la "dominante") se combina con el color global para formar
+`subcategoria_principal`, con formato `<color_global>_<dimension_dominante>`
+(ej: `rojo_ansiedad`). Las siete dimensiones propuestas son: `ansiedad`,
+`estres_academico`, `humor_depresivo`, `sueno`, `relaciones_sociales`,
+`autoestima_autocuidado`, `energia_motivacion`.
 
 ---
 
@@ -190,6 +200,30 @@ Almacenamiento alternativo de respuestas de evaluación en formato JSON consolid
 
 ---
 
+### 6.1. `semaforo_dimensiones` (Fase 5)
+
+Detalle por dimensión de una evaluación: puntaje y nivel calculados para cada
+una de las siete dimensiones propuestas. La dimensión con peor nivel
+determina `evaluaciones.subcategoria_principal`.
+
+| Campo | Tipo | Restricciones | Por Defecto |
+|---|---|---|---|
+| `id` | `serial` | PK | auto-increment |
+| `evaluacion_id` | `integer` | FK → `evaluaciones.id` | nullable |
+| `dimension` | `varchar(80)` | NOT NULL | — |
+| `puntaje` | `integer` | NOT NULL (0–100) | — |
+| `nivel` | `varchar(20)` | NOT NULL (`verde`, `amarillo`, `rojo`) | — |
+| `created_at` | `timestamp` | NOT NULL | `now()` |
+| `updated_at` | `timestamp` | NOT NULL | `now()` |
+| `deleted_at` | `timestamp` | nullable | — |
+
+**Índices:** `idx_semaforo_dimensiones_evaluacion_id`, `idx_semaforo_dimensiones_dimension`
+
+**Dimensiones propuestas:** `ansiedad`, `estres_academico`, `humor_depresivo`,
+`sueno`, `relaciones_sociales`, `autoestima_autocuidado`, `energia_motivacion`.
+
+---
+
 ### 7. `encuestas`
 
 Encuestas personalizadas definidas por administradores.
@@ -234,11 +268,19 @@ Preguntas para el registro emocional diario. Se sembraron inicialmente 20 pregun
 | `id` | `serial` | PK | auto-increment |
 | `texto` | `text` | NOT NULL, **UNIQUE** | — |
 | `is_active` | `boolean` | NOT NULL | `true` |
+| `categoria` | `varchar(80)` | NOT NULL (Fase 5, dimensión evaluada) | `'general'` |
 | `created_at` | `timestamp` | NOT NULL | `now()` |
 | `updated_at` | `timestamp` | NOT NULL | `now()` |
 | `deleted_at` | `timestamp` | nullable | — |
 
 **Índice único:** `uq_preguntas_registro_emocional_texto` sobre `texto`
+
+**Índice:** `idx_preguntas_registro_emocional_categoria` sobre `categoria`
+
+**Fase 5 — Dimensiones:** `categoria` clasifica cada pregunta en una de las
+siete dimensiones del semáforo (`ansiedad`, `estres_academico`,
+`humor_depresivo`, `sueno`, `relaciones_sociales`, `autoestima_autocuidado`,
+`energia_motivacion`), o `general` si no aplica una dimensión específica.
 
 ---
 
@@ -551,6 +593,9 @@ Almacena contenido textual dinámico de la aplicación: términos y condiciones,
 | `diario` | `idx_diario_usuario_id` | `usuario_id` |
 | `feedback` | `idx_feedback_usuario_id` | `usuario_id` |
 | `fallas_tecnicas` | `idx_fallas_tecnicas_usuario_id` | `usuario_id` |
+| `semaforo_dimensiones` | `idx_semaforo_dimensiones_evaluacion_id` | `evaluacion_id` |
+| `semaforo_dimensiones` | `idx_semaforo_dimensiones_dimension` | `dimension` |
+| `preguntas_registro_emocional` | `idx_preguntas_registro_emocional_categoria` | `categoria` |
 
 ### Índices Únicos
 
@@ -586,7 +631,7 @@ Almacena contenido textual dinámico de la aplicación: términos y condiciones,
 
 | Propósito | Ruta |
 |---|---|
-| Esquema completo de la BD (21 tablas) | `src/db/schema.ts` |
+| Esquema completo de la BD (22 tablas) | `src/db/schema.ts` |
 | Conexión y configuración de Drizzle ORM | `src/db/index.ts` |
 | Script de migraciones | `src/db/migrate.ts` |
 | Datos semilla | `src/db/seed.ts` |

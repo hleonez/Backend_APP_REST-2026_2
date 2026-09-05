@@ -151,6 +151,7 @@ const obtenerUltimoSemaforo = async (usuarioId: number): Promise<SemaforoActual 
     .select({
       puntaje_total: schema.evaluaciones.puntaje_total,
       estado_semaforo: schema.evaluaciones.estado_semaforo,
+      subcategoria_principal: schema.evaluaciones.subcategoria_principal,
     })
     .from(schema.evaluaciones)
     .where(
@@ -169,7 +170,13 @@ const obtenerUltimoSemaforo = async (usuarioId: number): Promise<SemaforoActual 
 
   return {
     color,
-    subcategoria: null,
+    // Fase 5: preferir la subcategoría persistida en BD
+    // (`<color_global>_<dimension_dominante>`, calculada por
+    // `asignacion-semaforo.controller.ts` / `analizarRespuestasOllama`).
+    // Queda en null para evaluaciones creadas antes de esta fase o sin
+    // datos suficientes para calcular dimensiones; en ese caso
+    // `construirContextoBienestar` aplica el fallback heurístico existente.
+    subcategoria: ultimaEvaluacion.subcategoria_principal ?? null,
     puntaje_global: puntajeGlobal,
   };
 };
@@ -257,8 +264,13 @@ export const construirContextoBienestar = async (usuarioId: number): Promise<Con
     obtenerRegistroEmocional7d(usuarioId),
   ]);
 
+  // Fase 5: si la evaluación ya trae `subcategoria_principal` persistida
+  // (ver `obtenerUltimoSemaforo`), se respeta tal cual. Solo se recurre al
+  // fallback heurístico (dimensión con mayor severidad en los últimos datos
+  // agregados) cuando no hay subcategoría calculada, típicamente para
+  // evaluaciones anteriores a esta fase.
   const semaforoConSubcategoria =
-    semaforoActual && (onboardingBase[0]?.dimension || registro7d[0]?.dimension)
+    semaforoActual && !semaforoActual.subcategoria && (onboardingBase[0]?.dimension || registro7d[0]?.dimension)
       ? {
           ...semaforoActual,
           subcategoria: onboardingBase[0]?.dimension ?? registro7d[0]?.dimension ?? null,
