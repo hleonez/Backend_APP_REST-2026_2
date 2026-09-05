@@ -199,7 +199,9 @@ release. La convención de ramas es:
 ```
 feature/*  -->  develop   (todo el trabajo nuevo)
 develop    -->  main      (release)
-main       -->  develop   (solo el PR automático de sincronización)
+main       -->  develop   (PR automático que se autofusiona -auto-merge-
+                            en cuanto pasan los checks, sin intervención
+                            manual y sin reescribir historia)
 ```
 
 Ver la guía completa de activación (permisos, protección de ramas, checks
