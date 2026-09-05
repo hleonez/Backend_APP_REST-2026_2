@@ -1,0 +1,40 @@
+name: CI
+
+# Valida que el proyecto compila correctamente antes de fusionar cambios.
+#
+# Se ejecuta en:
+# - Pull requests hacia `main` o `develop` (incluye PRs desde ramas `feature/*`
+#   y el PR automático de sincronización `main -> develop`).
+# - Pushes directos a `main` o `develop` (por ejemplo, tras un merge).
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+  push:
+    branches:
+      - main
+      - develop
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Instalar dependencias y compilar
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Instalar dependencias (npm ci)
+        run: npm ci
+
+      - name: Compilar proyecto (npm run build)
+        run: npm run build
