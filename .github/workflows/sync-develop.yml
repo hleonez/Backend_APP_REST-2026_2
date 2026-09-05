@@ -1,0 +1,71 @@
+name: Sync main -> develop
+
+# Después de cada merge a `main`, abre (o reutiliza) un Pull Request de
+# `main` hacia `develop` para que `develop` quede alineada con `main`.
+#
+# Esta es la ÚNICA vía permitida para llevar cambios de `main` a `develop`:
+# el PR lo crea siempre este workflow con `github-actions[bot]` como autor.
+# La política de ramas (`branch-policy.yml`) usa esa condición para permitir
+# esta excepción puntual.
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  sync-pr:
+    name: Abrir o verificar PR de sincronización
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verificar si develop ya está al día con main
+        id: diff
+        run: |
+          git fetch origin main develop
+          if git diff --quiet origin/develop origin/main; then
+            echo "has_diff=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_diff=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Buscar PR de sincronización existente
+        id: existing_pr
+        if: steps.diff.outputs.has_diff == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pr_number=$(gh pr list \
+            --base develop \
+            --head main \
+            --state open \
+            --json number \
+            --jq '.[0].number // empty')
+          echo "number=$pr_number" >> "$GITHUB_OUTPUT"
+
+      - name: Crear PR de sincronización main -> develop
+        if: steps.diff.outputs.has_diff == 'true' && steps.existing_pr.outputs.number == ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr create \
+            --base develop \
+            --head main \
+            --title "chore: sync main -> develop" \
+            --body "PR automático creado por el workflow de sincronización. Alinea \`develop\` con los últimos cambios fusionados en \`main\`."
+
+      - name: Nada que sincronizar
+        if: steps.diff.outputs.has_diff == 'false'
+        run: echo "develop ya está al día con main, no se crea PR."
+
+      - name: PR de sincronización ya existe
+        if: steps.diff.outputs.has_diff == 'true' && steps.existing_pr.outputs.number != ''
+        run: echo "Ya existe un PR abierto (#${{ steps.existing_pr.outputs.number }}) de main hacia develop; se actualiza automáticamente con los nuevos commits de main."
