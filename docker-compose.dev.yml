@@ -1,0 +1,11 @@
+# Override solo para desarrollo local.
+# Expone el puerto 8000 del microservicio de sentimiento para pruebas (ej: curl).
+# En producción NO usar este archivo: levantar solo con docker-compose.yml.
+#
+# Uso local:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build sentiment
+
+services:
+  sentiment:
+    ports:
+      - "8000:8000"
