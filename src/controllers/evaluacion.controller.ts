@@ -1,8 +1,8 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, isNull, inArray, and } from 'drizzle-orm';
 import { AuthRequest } from '../middleware/auth.middleware';
-import { analizarRespuestasOllama } from '../services/ollama.service';
+import { analizarRespuestasOllama, construirDimensionesEvaluacionClasica } from '../services/ollama.service';
 import { db } from '../db';
 import * as schema from '../db/schema';
 
@@ -103,6 +103,14 @@ export const crearEvaluacion = async (req: AuthRequest, res: Response): Promise<
         estado = 'verde';
       }
 
+      // Fase 5: detalle por dimensión y subcategoría principal, calculados
+      // de forma determinista igual que en `analizarRespuestasOllama`.
+      const { dimensiones, subcategoria_principal } = construirDimensionesEvaluacionClasica(
+        preguntas,
+        respuestasTyped,
+        estado
+      );
+
       analisisResult = {
         estado,
         puntaje: Math.min(rawScore * 2, 100),
@@ -111,7 +119,9 @@ export const crearEvaluacion = async (req: AuthRequest, res: Response): Promise<
           'Mantén rutinas saludables de sueño y ejercicio',
           'Busca apoyo en familiares y amigos cercanos',
           'Considera hablar con un profesional si persisten las molestias'
-        ]
+        ],
+        dimensiones,
+        subcategoria_principal,
       };
     }
 
@@ -121,31 +131,52 @@ export const crearEvaluacion = async (req: AuthRequest, res: Response): Promise<
       observaciones ? `Observaciones usuario: ${observaciones}` : null,
     ].filter(Boolean).join(' | ');
 
-    const [nuevaEvaluacion] = await db.insert(schema.evaluaciones)
-      .values({
-        usuario_id: req.user.id,
-        puntaje_total: analisisResult.puntaje,
-        estado_semaforo: analisisResult.estado,
-        observaciones: observacionesTexto,
-      })
-      .returning();
-
-    // Insert respuestas asociadas
     const pesoPorPregunta = new Map(preguntas.map(p => [p.id, p.peso]));
     const respuestasAInsertar = respuestasTyped.map((r) => ({
-      evaluacion_id: nuevaEvaluacion.id,
       pregunta_id: r.pregunta_id,
       respuesta: r.respuesta,
       puntaje_calculado: r.respuesta * (pesoPorPregunta.get(r.pregunta_id) || 1),
     }));
 
-    if (respuestasAInsertar.length > 0) {
-      await db.insert(schema.respuestas).values(respuestasAInsertar);
-    }
+    // Fase 5: persistir la evaluación, sus respuestas y el detalle por
+    // dimensión en una sola transacción para mantener todo consistente.
+    const nuevaEvaluacion = await db.transaction(async (tx) => {
+      const [evaluacionCreada] = await tx.insert(schema.evaluaciones)
+        .values({
+          usuario_id: req.user!.id,
+          puntaje_total: analisisResult.puntaje,
+          estado_semaforo: analisisResult.estado,
+          observaciones: observacionesTexto,
+          subcategoria_principal: analisisResult.subcategoria_principal ?? null,
+        })
+        .returning();
+
+      if (respuestasAInsertar.length > 0) {
+        await tx.insert(schema.respuestas).values(
+          respuestasAInsertar.map((r) => ({ ...r, evaluacion_id: evaluacionCreada.id }))
+        );
+      }
+
+      if (analisisResult.dimensiones.length > 0) {
+        await tx.insert(schema.semaforo_dimensiones).values(
+          analisisResult.dimensiones.map((d) => ({
+            evaluacion_id: evaluacionCreada.id,
+            dimension: d.dimension,
+            puntaje: d.puntaje,
+            nivel: d.nivel,
+          }))
+        );
+      }
+
+      return evaluacionCreada;
+    });
 
     res.status(201).json({
       message: 'Evaluación creada exitosamente',
-      evaluacion: nuevaEvaluacion,
+      evaluacion: {
+        ...nuevaEvaluacion,
+        dimensiones: analisisResult.dimensiones,
+      },
       analisis: analisisResult
     });
 
@@ -171,7 +202,18 @@ export const getEvaluaciones = async (req: AuthRequest, res: Response): Promise<
       .where(eq(schema.evaluaciones.usuario_id, req.user.id as number))
       .orderBy(desc(schema.evaluaciones.fecha));
 
-    res.json(evaluaciones);
+    // Fase 5: adjuntar el detalle por dimensión de cada evaluación
+    // (`subcategoria_principal` ya viene incluido por ser columna propia
+    // de `evaluaciones`).
+    const evaluacionIds = evaluaciones.map((e) => e.id);
+    const dimensionesPorEvaluacion = await obtenerDimensionesPorEvaluaciones(evaluacionIds);
+
+    const evaluacionesConDimensiones = evaluaciones.map((evaluacion) => ({
+      ...evaluacion,
+      dimensiones: dimensionesPorEvaluacion.get(evaluacion.id) ?? [],
+    }));
+
+    res.json(evaluacionesConDimensiones);
   } catch (error) {
     console.error('Error fetching evaluations:', error);
     res.status(500).json({ message: 'Error en el servidor' });
@@ -212,9 +254,63 @@ export const getEvaluacion = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    res.json(evaluacion);
+    // Fase 5: adjuntar el detalle por dimensión de la evaluación
+    // (`subcategoria_principal` ya viene incluido por ser columna propia
+    // de `evaluaciones`).
+    const dimensionesPorEvaluacion = await obtenerDimensionesPorEvaluaciones([evaluacion.id]);
+
+    res.json({
+      ...evaluacion,
+      dimensiones: dimensionesPorEvaluacion.get(evaluacion.id) ?? [],
+    });
   } catch (error) {
     console.error('Error fetching evaluation:', error);
     res.status(500).json({ message: 'Error en el servidor' });
   }
-}; 
+};
+
+/**
+ * Fase 5: obtiene el detalle por dimensión (`semaforo_dimensiones`) para un
+ * conjunto de evaluaciones, agrupado por `evaluacion_id`. Ignora filas
+ * borradas lógicamente (soft-delete).
+ */
+const obtenerDimensionesPorEvaluaciones = async (
+  evaluacionIds: number[]
+): Promise<Map<number, { id: number; dimension: string; puntaje: number; nivel: string }[]>> => {
+  const resultado = new Map<number, { id: number; dimension: string; puntaje: number; nivel: string }[]>();
+
+  if (evaluacionIds.length === 0) {
+    return resultado;
+  }
+
+  const filas = await db
+    .select({
+      id: schema.semaforo_dimensiones.id,
+      evaluacion_id: schema.semaforo_dimensiones.evaluacion_id,
+      dimension: schema.semaforo_dimensiones.dimension,
+      puntaje: schema.semaforo_dimensiones.puntaje,
+      nivel: schema.semaforo_dimensiones.nivel,
+    })
+    .from(schema.semaforo_dimensiones)
+    .where(
+      and(
+        inArray(schema.semaforo_dimensiones.evaluacion_id, evaluacionIds),
+        isNull(schema.semaforo_dimensiones.deleted_at),
+      ),
+    );
+
+  for (const fila of filas) {
+    if (fila.evaluacion_id === null) continue;
+
+    const lista = resultado.get(fila.evaluacion_id) ?? [];
+    lista.push({
+      id: fila.id,
+      dimension: fila.dimension,
+      puntaje: fila.puntaje,
+      nivel: fila.nivel,
+    });
+    resultado.set(fila.evaluacion_id, lista);
+  }
+
+  return resultado;
+};
