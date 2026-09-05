@@ -25,8 +25,10 @@ Aplicación de evaluación de salud mental con sistema de semáforo (verde, amar
 │   ├── websocket/           # Implementación de WebSockets
 │   └── index.ts             # Punto de entrada
 ├── dist/                    # Código compilado
+├── sentiment/               # Microservicio de análisis de sentimiento (Python)
 ├── Dockerfile               # Configuración de Docker
 ├── docker-compose.yml       # Configuración de Docker Compose
+├── docker-compose.dev.yml   # Override solo para desarrollo (expone puertos internos)
 ├── drizzle.config.ts        # Configuración de Drizzle ORM
 └── package.json             # Dependencias
 ```
@@ -70,8 +72,50 @@ Hacer 'npm install' para que el editor de código no de error en todas las impor
 - Ollama: `11434` → `http://localhost:11434`
 - Postgres: `5433` en la máquina (mapeado a `5432` en el contenedor) -> se pone en el puerto 5433 por si la máquina ya tiene postgres instalado este por defecto usa el 5432,
 así no hay conflicto, esto se puede cambiar a usar el 5434 o 5435 según se necesite.
+- Sentiment (microservicio de sentimiento): `8000` → solo expuesto en desarrollo (ver sección "Servicio de sentimiento")
 
 Las variables se definen en `docker-compose.yml`, esto por simplicidad de desarrollo, pero en producción se debe modificar eso para cargarla desde un .env por seguridad.
+
+## Servicio de sentimiento
+
+Microservicio Python (FastAPI + pysentimiento/RoBERTuito) que clasifica el sentimiento de un texto en `NEG`, `NEU` o `POS`.
+
+- **Imagen**: se construye desde `sentiment/` (`python:3.10-slim`).
+- **Puerto interno**: `8000`. **No se expone al host en producción**; solo mediante el override de desarrollo.
+- **Modelo**: se descarga de HuggingFace en la primera arrancada (~500MB) y se cachea en el volumen `hf_cache` (sobrevive a recreaciones del contenedor).
+- **Primera arrancada**: el healthcheck queda en estado `starting` (start_period 60s) hasta que se descarga el modelo y el servicio responde `GET /health`.
+
+### Uso en desarrollo local (expone puerto 8000 para pruebas)
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build sentiment
+```
+
+### Uso en producción (VPS, sin exponer el puerto)
+
+```bash
+docker compose up -d --build
+# Verifica que sentiment no aparece con puerto expuesto:
+docker compose ps
+```
+
+### Prueba de validación
+
+```bash
+curl http://localhost:8000/health
+
+curl -X POST http://localhost:8000/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"texto":"Hoy me fue súper mal en el parcial 😭"}'
+```
+Debe devolver algo como:
+```JSON
+{"label": "NEG", "scores": {"NEG": 0.97, "NEU": 0.02, "POS": 0.01}}
+```
+
+### Variables de entorno
+- `SENTIMENT_API_URL`: URL del microservicio. En Docker Compose se resuelve a `http://sentiment:8000`. Para desarrollo local fuera de Docker apunta a `http://localhost:8000`.
+- `TRANSFORMERS_CACHE`: dentro del contenedor apunta al volumen `hf_cache`.
 
 ## Base de datos (Drizzle ORM)
 

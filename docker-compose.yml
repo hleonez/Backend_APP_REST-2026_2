@@ -12,12 +12,15 @@ services:
       - OLLAMA_API_URL=http://ollama:11434
       - OLLAMA_MODEL=qwen2:1.5b
       - USE_OLLAMA=true
+      - SENTIMENT_API_URL=${SENTIMENT_API_URL:-http://sentiment:8000}
       - PORT=3000
     depends_on:
       postgres:
         condition: service_healthy
       ollama:
         condition: service_started
+      sentiment:
+        condition: service_healthy
     networks:
       - app-network
 
@@ -53,6 +56,25 @@ services:
     networks:
       - app-network
 
+  # Microservicio de análisis de sentimiento (Robertuito / pysentimiento).
+  # Interno: no se expone puerto al host en producción. Solo red app-network.
+  sentiment:
+    build: ./sentiment
+    restart: unless-stopped
+    environment:
+      - TRANSFORMERS_CACHE=/root/.cache/huggingface
+    volumes:
+      - hf_cache:/root/.cache/huggingface
+    networks:
+      - app-network
+    healthcheck:
+      # python:3.10-slim no incluye curl; se usa urllib del runtime.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
   # Servicio para inicializar Ollama con el modelo
   ollama-init:
     image: curlimages/curl:latest
@@ -77,6 +99,8 @@ volumes:
   ollama_data:
     driver: local
   postgres_data:
+    driver: local
+  hf_cache:
     driver: local
 
 networks:
