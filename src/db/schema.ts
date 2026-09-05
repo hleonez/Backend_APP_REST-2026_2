@@ -81,6 +81,11 @@ export const evaluaciones = pgTable('evaluaciones', {
   estado_semaforo: varchar('estado_semaforo', { length: 50 }),
   observaciones: text('observaciones'),
 
+  // Fase 5: dimensión dominante (peor nivel) combinada con el color global.
+  // Formato: `${color_global}_${dimension_dominante}` (ej: "rojo_ansiedad").
+  // Nullable para no romper evaluaciones históricas creadas antes de esta fase.
+  subcategoria_principal: varchar('subcategoria_principal', { length: 80 }),
+
   created_at: timestamp('created_at').defaultNow().notNull(),
   updated_at: timestamp('updated_at').defaultNow().notNull(),
   deleted_at: timestamp('deleted_at'),
@@ -88,10 +93,44 @@ export const evaluaciones = pgTable('evaluaciones', {
   idxEvaluacionesUsuarioId: index('idx_evaluaciones_usuario_id').on(t.usuario_id),
 }));
 
-export const evaluacionesrelations = relations(evaluaciones, ({ one }) => ({
+export const evaluacionesrelations = relations(evaluaciones, ({ one, many }) => ({
   usuario: one(usuarios, {
     fields: [evaluaciones.usuario_id],
     references: [usuarios.id],
+  }),
+  dimensiones: many(semaforo_dimensiones),
+}));
+
+// ================================
+// SEMAFORO DIMENSIONES (Fase 5)
+// ================================
+// Detalle por dimensión de una evaluación: puntaje y nivel (verde/amarillo/rojo)
+// calculados para cada una de las dimensiones propuestas (ansiedad,
+// estres_academico, humor_depresivo, sueno, relaciones_sociales,
+// autoestima_autocuidado, energia_motivacion). La dimensión con peor nivel
+// se usa para construir `evaluaciones.subcategoria_principal`.
+export const semaforo_dimensiones = pgTable('semaforo_dimensiones', {
+  id: serial('id').primaryKey(),
+
+  evaluacion_id: integer('evaluacion_id')
+    .references(() => evaluaciones.id, { onDelete: 'set null' }),
+
+  dimension: varchar('dimension', { length: 80 }).notNull(),
+  puntaje: integer('puntaje').notNull(),
+  nivel: varchar('nivel', { length: 20 }).notNull(), // 'verde' | 'amarillo' | 'rojo'
+
+  created_at: timestamp('created_at').defaultNow().notNull(),
+  updated_at: timestamp('updated_at').defaultNow().notNull(),
+  deleted_at: timestamp('deleted_at'),
+}, (t) => ({
+  idxSemaforoDimensionesEvaluacionId: index('idx_semaforo_dimensiones_evaluacion_id').on(t.evaluacion_id),
+  idxSemaforoDimensionesDimension: index('idx_semaforo_dimensiones_dimension').on(t.dimension),
+}));
+
+export const semaforo_dimensionesrelations = relations(semaforo_dimensiones, ({ one }) => ({
+  evaluacion: one(evaluaciones, {
+    fields: [semaforo_dimensiones.evaluacion_id],
+    references: [evaluaciones.id],
   }),
 }));
 
@@ -230,11 +269,18 @@ export const preguntas_registro_emocional = pgTable('preguntas_registro_emociona
   texto: text('texto').notNull(),
   is_active: boolean('is_active').default(true).notNull(),
 
+  // Fase 5: dimensión evaluada por la pregunta (ansiedad, estres_academico,
+  // humor_depresivo, sueno, relaciones_sociales, autoestima_autocuidado,
+  // energia_motivacion). Por defecto 'general' para preguntas sin dimensión
+  // específica asignada.
+  categoria: varchar('categoria', { length: 80 }).default('general').notNull(),
+
   created_at: timestamp('created_at').defaultNow().notNull(),
   updated_at: timestamp('updated_at').defaultNow().notNull(),
   deleted_at: timestamp('deleted_at'),
 }, (t) => ({
   uqPreguntasRegistroEmocionalTexto: uniqueIndex('uq_preguntas_registro_emocional_texto').on(t.texto),
+  idxPreguntasRegistroEmocionalCategoria: index('idx_preguntas_registro_emocional_categoria').on(t.categoria),
 }));
 
 export const opciones_registro_emocional = pgTable('opciones_registro_emocional', {

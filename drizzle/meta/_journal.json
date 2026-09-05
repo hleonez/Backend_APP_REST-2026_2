@@ -29,6 +29,13 @@
       "when": 1776024000000,
       "tag": "0003_sentimiento_mensajes",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1776200000000,
+      "tag": "0004_semaforo_dimensiones",
+      "breakpoints": true
     }
   ]
 }
