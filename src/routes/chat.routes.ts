@@ -7,10 +7,9 @@ import {
   updateChatPut, 
   updateChatPatch, 
   deleteChat, 
-  chatConIA, 
+  chatConIAUnificado, 
   getHistorialChatIA,
   detenerChatIA,
-  chatConIAAvanzado,
   obtenerActividadesRecomendadas,
   obtenerEstadoPsicologicoUsuario
 } from '../controllers/chat.controller';
@@ -49,7 +48,7 @@ const router = Router();
  *       200:
  *         description: Respuesta generada por la IA
  */
-router.post('/ia', authenticate, chatConIA);
+router.post('/ia', authenticate, chatConIAUnificado);
 
 /**
  * @swagger
@@ -92,7 +91,7 @@ router.post('/ia/detener', authenticate, detenerChatIA);
  *       200:
  *         description: Análisis contextualizado e inteligencias de bienestar
  */
-router.post('/ia/avanzado', authenticate, chatConIAAvanzado);
+router.post('/ia/avanzado', authenticate, chatConIAUnificado);
 
 router.get('/actividades/recomendadas', authenticate, obtenerActividadesRecomendadas);
 router.get('/estado-psicologico', authenticate, obtenerEstadoPsicologicoUsuario);
