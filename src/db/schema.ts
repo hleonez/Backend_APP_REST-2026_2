@@ -1,5 +1,5 @@
 import { relations, sql } from 'drizzle-orm';
-import { pgTable, serial, varchar, integer, timestamp, boolean, text, date, index, uniqueIndex } from 'drizzle-orm/pg-core';
+import { pgTable, serial, varchar, integer, timestamp, boolean, text, date, index, uniqueIndex, numeric, jsonb } from 'drizzle-orm/pg-core';
 
 // ================================
 // USUARIOS
@@ -465,7 +465,14 @@ export const mensajes_chat = pgTable('mensajes_chat', {
     .references(() => usuarios.id, { onDelete: 'set null' }),
 
   mensaje: text('mensaje').notNull(),
-  
+
+  // Sentimiento (Robertuito, Fase 2): solo se completa para mensajes del
+  // estudiante analizados por el encoder o su fallback seguro. Nullable
+  // para no romper otros flujos que insertan mensajes (websocket, CRUD).
+  sentimiento: varchar('sentimiento', { length: 10 }), // 'NEG' | 'NEU' | 'POS'
+  confianza: numeric('confianza', { precision: 5, scale: 3 }),
+  sentimiento_scores: jsonb('sentimiento_scores'), // { NEG, NEU, POS }
+
   enviado_en: timestamp('enviado_en').defaultNow().notNull(),
 
   created_at: timestamp('created_at').defaultNow().notNull(),

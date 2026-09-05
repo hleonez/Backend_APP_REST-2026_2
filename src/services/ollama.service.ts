@@ -1,5 +1,6 @@
 import { construirPromptDinamico, construirPromptFinal, generarRespuestaFallbackNatural, esRespuestaAceptable } from './prompts-enhanced.service';
 import { analizarPatronesEmocionales, construirResumenPerfil } from './user-profile.service';
+import type { EstiloRespuestaId } from '../shared/const/estilos-respuesta.const';
 
 const OLLAMA_API_URL = process.env.OLLAMA_API_URL || 'http://localhost:11434';
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'qwen2:1.5b'; // Modelo balanceado para CPU
@@ -569,8 +570,15 @@ export const chatWithOllama = async (params: {
   modo?: ModoRespuesta;
   userId?: number;
   numeroMensaje?: number;
+  /**
+   * Estilo de respuesta elegido por el selector determinista
+   * (`selector-estilo.service.ts`, Fase 3). Si no se provee (p. ej.
+   * `chatConIAAvanzado`, que aun no integra el selector), se usa
+   * 'conversacion_neutral' como estilo por defecto seguro.
+   */
+  estilo?: EstiloRespuestaId;
 }): Promise<ChatResponse> => {
-  const { mensaje, contexto, modo, userId, numeroMensaje = 0 } = params;
+  const { mensaje, contexto, modo, userId, numeroMensaje = 0, estilo = 'conversacion_neutral' } = params;
 
   try {
     // Obtener perfil del usuario si disponible
@@ -593,8 +601,8 @@ export const chatWithOllama = async (params: {
       }
     }
 
-    // Construir system prompt dinámico basado en perfil
-    const systemPrompt = construirPromptDinamico(perfilContexto);
+    // Construir system prompt dinámico basado en perfil + estilo elegido
+    const systemPrompt = construirPromptDinamico(perfilContexto, estilo);
 
     // Construir prompts con variación
     let userPrompt = mensaje;
@@ -604,11 +612,10 @@ export const chatWithOllama = async (params: {
       contextoDinamico = `${resumenPerfil ? resumenPerfil + ' ' : ''}${contexto}`;
     }
 
-    const promspts = construirPromptFinal(mensaje, systemPrompt, numeroMensaje, contextoDinamico);
+    const promspts = construirPromptFinal(mensaje, systemPrompt, estilo, numeroMensaje, contextoDinamico);
 
     if (process.env.NODE_ENV !== 'production') {
-      const estiloNum = numeroMensaje % 6;
-      console.log(`[NOA DEBUG] Estilo #${estiloNum} (mensaje #${numeroMensaje})`);
+      console.log(`[NOA DEBUG] Estilo=${estilo} (mensaje #${numeroMensaje})`);
     }
 
     const respuestaCruda = await queryOllama(promspts.user, promspts.system);
