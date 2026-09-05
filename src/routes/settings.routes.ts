@@ -7,6 +7,7 @@ const router = Router();
 router.get("/profile", authenticate, isUsuario, settingsController.getProfile);
 router.put("/profile", authenticate, isUsuario, settingsController.updateProfile);
 router.put("/preferences", authenticate, isUsuario, settingsController.updatePreferences);
+router.put("/change-password", authenticate, isUsuario, settingsController.changePassword);
 router.post("/report", authenticate, isUsuario, settingsController.reportIssue);
 router.post("/feedback", authenticate, isUsuario, settingsController.sendFeedback);
 router.get("/code-of-conduct", authenticate, isUsuario, settingsController.getCodeOfConduct);
