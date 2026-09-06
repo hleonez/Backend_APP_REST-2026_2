@@ -85,6 +85,7 @@ async function seed() {
           url_imagen: '/images/actividades/naturaleza.png',
           is_active: true,
         },
+               
         {
           nombre: 'Conexión social',
           descripcion: 'Llamar o pasar tiempo con amigos y seres queridos',
