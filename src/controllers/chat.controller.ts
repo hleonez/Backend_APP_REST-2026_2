@@ -8,7 +8,7 @@ import { chatWithOllama } from '../services/ollama.service';
 import { APISuccessResponse, APIErrorResponse } from '../shared/utils/api.utils';
 import { analizarSentimiento, type SentimientoResultado } from '../services/sentimiento.service';
 import { elegirEstilo } from '../services/selector-estilo.service';
-import { analizarPatronesEmocionales } from '../services/user-profile.service';
+import { construirContextoBienestar } from '../services/contexto-bienestar.service';
 
 // Validation schema for messages
 const mensajeSchema = z.object({
@@ -421,27 +421,24 @@ export const getChats = async (req: AuthRequest, res: Response): Promise<void> =
 /**
  * Chat with AI using Ollama
  */
-export const chatConIA = async (req: AuthRequest, res: Response): Promise<void> => {
+export const chatConIAUnificado = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     if (!req.user?.id) {
       res.status(401).json(APIErrorResponse('Usuario no autenticado'));
       return;
     }
 
-    // Validate request body
     const validationResult = chatIASchema.safeParse(req.body);
-    
     if (!validationResult.success) {
       res.status(400).json(APIErrorResponse('Datos inválidos: ' + validationResult.error.errors[0].message));
       return;
     }
 
-    const { mensaje, contexto } = validationResult.data;
+    const { mensaje } = validationResult.data;
     const alerta = detectarAlertaCritica(mensaje);
     const chatIAId = await getOrCreateIAChat(req.user.id);
 
     if (alerta.esCritico) {
-      // PRIMERO buscar disponibilidad profesional antes de responder
       const profesionalId = await buscarProfesionalSalvavidas();
       const hayProfesional = profesionalId !== null;
 
@@ -487,21 +484,13 @@ export const chatConIA = async (req: AuthRequest, res: Response): Promise<void> 
     }
 
     try {
-      const historialReciente = await obtenerHistorialReciente(chatIAId, 10); // Aumentado a 10 mensajes
-      const modo = detectarModoProfundo(mensaje) ? 'profundo' : 'normal';
-
-      // Contar número de mensajes totales para variación de respuestas
       const totalMensajesChat = await db
-        .select()
+        .select({ id: schema.mensajes_chat.id })
         .from(schema.mensajes_chat)
         .where(eq(schema.mensajes_chat.chat_id, chatIAId));
-      
       const numeroMensaje = totalMensajesChat.length;
+      const modo = detectarModoProfundo(mensaje) ? 'profundo' : 'normal';
 
-      // --- Fase 2: análisis de sentimiento (Robertuito) ---
-      // Ocurre DESPUÉS de la capa de crisis (ya resuelta arriba, con
-      // return temprano) y ANTES de generar la respuesta. Nunca lanza:
-      // ante timeout/falla del encoder devuelve un fallback seguro.
       const sentimiento = await analizarSentimiento(mensaje);
 
       if (process.env.NODE_ENV !== 'production') {
@@ -510,52 +499,40 @@ export const chatConIA = async (req: AuthRequest, res: Response): Promise<void> 
         );
       }
 
-      // --- Fase 3: selección determinista de estilo ---
-      const [evaluacion, perfil, ultimosRegistros] = await Promise.all([
-        obtenerUltimaEvaluacion(req.user.id),
-        analizarPatronesEmocionales(req.user.id),
-        obtenerRegistrosEmocionales(req.user.id, 5),
-      ]);
-
-      const onboarding = !evaluacion;
-
+      const contextoBienestar = await construirContextoBienestar(req.user.id);
       const estilo = elegirEstilo({
         sentimiento: { label: sentimiento.label, confianza: sentimiento.confianza },
-        semaforo: normalizarSemaforo(evaluacion?.estado_semaforo),
-        // No existe todavia un clasificador de dominio (academico, sueno,
-        // social, etc.); se deja sin valor hasta que se implemente en una
-        // futura iteracion.
-        subcategoria: undefined,
+        semaforo: contextoBienestar.datos.semaforo_actual?.color,
+        subcategoria: contextoBienestar.datos.semaforo_actual?.subcategoria,
         perfil: {
-          emociones_frecuentes: perfil.emociones_frecuentes,
-          temas_recurrentes: perfil.temas_recurrentes,
-          patrones_comportamiento: perfil.patrones_comportamiento,
-          dias_sin_comunicacion: perfil.dias_sin_comunicacion,
-          tiene_historial: perfil.emociones_frecuentes.length > 0,
+          emociones_frecuentes: contextoBienestar.datos.perfil_emocional.emociones_frecuentes,
+          temas_recurrentes: contextoBienestar.datos.perfil_emocional.temas_recurrentes,
+          patrones_comportamiento: contextoBienestar.datos.perfil_emocional.patrones_comportamiento,
+          dias_sin_comunicacion: contextoBienestar.datos.perfil_emocional.dias_sin_comunicacion,
+          tiene_historial: contextoBienestar.datos.perfil_emocional.emociones_frecuentes.length > 0,
         },
-        ultimosRegistros,
-        onboarding,
+        ultimosRegistros: contextoBienestar.datos.registro_7d,
+        onboarding: contextoBienestar.datos.onboarding_base.length === 0,
       });
 
       if (process.env.NODE_ENV !== 'production') {
         console.log(`[NOA DEBUG] Estilo elegido=${estilo} (mensaje #${numeroMensaje})`);
       }
 
-      // Incorporar el sentimiento detectado al contexto que recibe la IA.
-      const contextoConSentimiento = sentimiento.origen === 'encoder'
-        ? `${historialReciente}${historialReciente ? ' | ' : ''}Sentimiento detectado en el ultimo mensaje del usuario: ${sentimiento.label} (confianza ${sentimiento.confianza.toFixed(2)}).`
-        : historialReciente;
+      const contextoParaIA = [
+        contextoBienestar.bloque_prompt,
+        `Sentimiento detectado en el ultimo mensaje: ${sentimiento.label} (confianza ${sentimiento.confianza.toFixed(2)}).`,
+      ].join('\n\n');
 
       const respuestaIA = await Promise.race([
         chatWithOllama({
           mensaje,
-          contexto: contextoConSentimiento,
+          contexto: contextoParaIA,
           modo,
-          userId: req.user.id, // Pasar userId para perfil
-          numeroMensaje, // Solo para debugging y variacion de fraseo dentro del estilo
-          estilo, // Estilo elegido por el selector determinista (Fase 3)
+          numeroMensaje,
+          estilo,
         }),
-        new Promise((_, reject) => 
+        new Promise((_, reject) =>
           setTimeout(() => reject(new Error('Timeout')), 70000)
         )
       ]) as any;
@@ -581,22 +558,22 @@ export const chatConIA = async (req: AuthRequest, res: Response): Promise<void> 
         psicologo_asignado_id: null,
         mensaje_sistema: null,
       }, 'Chat completado exitosamente'));
-
     } catch (aiError: any) {
       console.error('Error en chat con IA:', aiError);
-      
+
       if (aiError.message === 'Timeout' || aiError.message.includes('no responde')) {
         res.status(503).json(APIErrorResponse('El servicio de IA está respondiendo lentamente. Por favor, intenta nuevamente en unos momentos.'));
       } else {
         res.status(503).json(APIErrorResponse('Error comunicándose con el servicio de IA. Por favor, intenta nuevamente.'));
       }
     }
-
   } catch (error) {
     console.error('Error in AI chat:', error);
     res.status(500).json(APIErrorResponse('Error interno del servidor'));
   }
 };
+
+export const chatConIA = chatConIAUnificado;
 
 /**
  * Get AI chat history for user (if stored in future)
@@ -926,105 +903,7 @@ const extraerTareasDelContenido = (contenido: string): any[] => {
   return [];
 };
 
-export const chatConIAAvanzado = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    if (!req.user?.id) {
-      res.status(401).json(APIErrorResponse('Usuario no autenticado'));
-      return;
-    }
-
-    const validationResult = chatIASchema.safeParse(req.body);
-    if (!validationResult.success) {
-      res.status(400).json(APIErrorResponse('Datos inválidos: ' + validationResult.error.errors[0].message));
-      return;
-    }
-
-    const { mensaje, contexto } = validationResult.data;
-    const usuarioId = req.user.id;
-
-    // Obtener información del usuario
-    const evaluacion = await obtenerUltimaEvaluacion(usuarioId);
-    const actividades = await obtenerRegistrosActividades(usuarioId);
-    const emociones = await obtenerRegistrosEmocionales(usuarioId);
-    const recomendoFormulario = await yaRecomendoFormulario(usuarioId);
-
-    // Construir contexto del usuario
-    let contextoUsuario = '';
-    
-    if (evaluacion) {
-      contextoUsuario += `\n📊 Estado emocional actual: ${evaluacion.estado_semaforo} (Puntaje: ${evaluacion.puntaje_total})\n`;
-      if (evaluacion.observaciones) {
-        contextoUsuario += `Observaciones: ${evaluacion.observaciones}\n`;
-      }
-    }
-
-    if (actividades.length > 0) {
-      contextoUsuario += `\n🏃 Actividades recientes:\n`;
-      actividades.forEach(act => {
-        contextoUsuario += `- ${act.opcion?.nombre || 'Actividad'}: ${act.fecha.toISOString().split('T')[0]}\n`;
-      });
-    }
-
-    if (emociones.length > 0) {
-      contextoUsuario += `\n😊 Registros emocionales recientes:\n`;
-      emociones.forEach(em => {
-        contextoUsuario += `- ${em.opcion?.nombre || 'Emoción'} (${em.opcion?.puntaje || 0}/10): ${em.fecha.toISOString().split('T')[0]}\n`;
-      });
-    }
-
-    // Construir prompt base
-    const promptBase = `
-Actúa como un asistente terapéutico especializado en salud mental y bienestar emocional. Estás interactuando con un usuario que atraviesa un proceso de recuperación emocional. Tu propósito exclusivo es brindar apoyo conversacional empático, sin realizar diagnósticos clínicos ni emitir juicios.
-
-⚠️ IMPORTANTE: Tu función está estrictamente limitada al contexto de salud mental. No puedes brindar información, consejos ni ayuda en temas que no sean emocionales o relacionados al bienestar personal.
-
-📌 Temas estrictamente prohibidos (no debes responder sobre esto):
-- Programación, código, desarrollo de software o IA
-- Matemáticas, física o ciencia académica
-- Ayuda en tareas, trabajos, exámenes o solución de ejercicios
-- Historia, cultura general, geografía, idiomas o biología
-- Tecnología, juegos, política o economía
-- Religión, creencias personales o filosofía
-
-⚠️ Si el usuario realiza una pregunta fuera del contexto emocional o busca ayuda en tareas, responde exclusivamente con una frase como alguna de las siguientes:
-1. "Mi función es acompañarte emocionalmente. ¿Quieres contarme cómo te has sentido últimamente?"
-2. "Estoy aquí para escucharte y ayudarte en tu proceso emocional, ¿quieres que hablemos de cómo estás hoy?"
-3. "Puedo ayudarte a entender lo que sientes o apoyarte si estás pasando por algo difícil. ¿Te gustaría que hablemos?"
-
-${contextoUsuario}
-
-Usuario: ${mensaje}
-`;
-
-    let prompt = promptBase;
-
-    // Agregar recomendación de formulario si es necesario
-    if (!evaluacion && !recomendoFormulario) {
-      prompt += `\n⚠️ El usuario aún no ha completado su evaluación emocional inicial. Responde de forma empática y sugiere completarla.`;
-    }
-
-    // Llamar a la IA
-    const respuestaIA = await chatWithOllama({
-      mensaje: prompt,
-      contexto,
-    });
-
-    // Procesar respuesta
-    const tareas = extraerTareasDelContenido(respuestaIA.respuesta);
-
-    res.status(201).json(APISuccessResponse({
-      usuario_id: usuarioId,
-      mensaje_usuario: mensaje,
-      respuesta_ia: respuestaIA.respuesta,
-      tareas_generadas: tareas,
-      timestamp: respuestaIA.timestamp
-    }, 'Chat avanzado completado exitosamente'));
-
-  } catch (error) {
-    console.error('Error en chat con IA avanzado:', error);
-    res.status(500).json(APIErrorResponse('Error interno del servidor'));
-  }
-};
+export const chatConIAAvanzado = chatConIAUnificado;
 
 /**
  * Obtener actividades recomendadas para el usuario

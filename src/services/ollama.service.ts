@@ -1,6 +1,13 @@
 import { construirPromptDinamico, construirPromptFinal, generarRespuestaFallbackNatural, esRespuestaAceptable } from './prompts-enhanced.service';
 import { analizarPatronesEmocionales, construirResumenPerfil } from './user-profile.service';
 import type { EstiloRespuestaId } from '../shared/const/estilos-respuesta.const';
+import {
+  agruparPuntajesPorDimension,
+  clasificarDimensionPorTexto,
+  construirSubcategoriaPrincipal,
+  determinarDimensionDominante,
+  type DimensionCalculada,
+} from '../shared/utils/semaforo-dimensiones.utils';
 
 const OLLAMA_API_URL = process.env.OLLAMA_API_URL || 'http://localhost:11434';
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'qwen2:1.5b'; // Modelo balanceado para CPU
@@ -17,6 +24,12 @@ interface MentalHealthResponse {
   puntaje: number;
   observaciones: string;
   recomendaciones: string[];
+  // Fase 5: detalle por dimensión y subcategoría principal
+  // (`${color_global}_${dimension_dominante}`). Se calculan de forma
+  // determinista a partir de las respuestas, independientemente de si el
+  // análisis final vino del modelo de Ollama o de alguno de los fallbacks.
+  dimensiones: DimensionCalculada[];
+  subcategoria_principal: string | null;
 }
 
 interface ChatResponse {
@@ -400,6 +413,35 @@ export const queryOllama = async (prompt: string, systemPrompt?: string): Promis
 };
 
 /**
+ * Fase 5: calcula el detalle por dimensión y la subcategoría principal para
+ * una evaluación clásica (tabla `preguntas`), a partir de sus respuestas en
+ * escala 1-5. Es determinista y no depende de Ollama, por lo que se puede
+ * usar en cualquiera de las rutas de retorno (éxito o fallback) de
+ * `analizarRespuestasOllama`.
+ */
+export const construirDimensionesEvaluacionClasica = (
+  preguntas: { id: number; texto: string; peso: number }[],
+  respuestas: { pregunta_id: number; respuesta: number }[],
+  colorGlobal: 'verde' | 'amarillo' | 'rojo'
+): { dimensiones: DimensionCalculada[]; subcategoria_principal: string | null } => {
+  const itemsPorDimension = respuestas.map((resp) => {
+    const pregunta = preguntas.find((p) => p.id === resp.pregunta_id);
+    const dimension = clasificarDimensionPorTexto(pregunta?.texto || '');
+    // Escala de respuesta: 1-5. Normalizado a 0-100 (1 -> 0, 5 -> 100).
+    const puntajeNormalizado = Math.max(0, Math.min(100, ((resp.respuesta - 1) / 4) * 100));
+    return { dimension, puntaje: puntajeNormalizado };
+  });
+
+  const dimensiones = agruparPuntajesPorDimension(itemsPorDimension);
+  const dimensionDominante = determinarDimensionDominante(dimensiones);
+  const subcategoria_principal = dimensionDominante
+    ? construirSubcategoriaPrincipal(colorGlobal, dimensionDominante.dimension)
+    : null;
+
+  return { dimensiones, subcategoria_principal };
+};
+
+/**
  * Analiza respuestas de salud mental usando Ollama
  */
 export const analizarRespuestasOllama = async (
@@ -494,11 +536,26 @@ export const analizarRespuestasOllama = async (
       if (!parsedResponse.estado || !parsedResponse.puntaje || !parsedResponse.observaciones || !parsedResponse.recomendaciones) {
         throw new Error('Respuesta incompleta del modelo');
       }
-      
-      return parsedResponse;
+
+      // Fase 5: el modelo solo determina el color/puntaje global. El detalle
+      // por dimensión y la subcategoría principal se calculan siempre de
+      // forma determinista, independientemente de la fuente del análisis.
+      const { dimensiones, subcategoria_principal } = construirDimensionesEvaluacionClasica(
+        preguntas,
+        respuestas,
+        parsedResponse.estado
+      );
+
+      return { ...parsedResponse, dimensiones, subcategoria_principal };
     } catch (parseError) {
       console.error('Error parseando respuesta de Ollama:', parseError);
-      
+
+      const { dimensiones, subcategoria_principal } = construirDimensionesEvaluacionClasica(
+        preguntas,
+        respuestas,
+        fallbackState
+      );
+
       // Fallback con datos calculados
       return {
         estado: fallbackState,
@@ -508,7 +565,9 @@ export const analizarRespuestasOllama = async (
           'Mantén rutinas saludables de sueño y ejercicio',
           'Busca apoyo en familiares y amigos cercanos',
           'Considera hablar con un profesional si persisten las molestias'
-        ]
+        ],
+        dimensiones,
+        subcategoria_principal,
       };
     }
   } catch (error) {
@@ -542,7 +601,13 @@ export const analizarRespuestasOllama = async (
     } else {
       estado = 'verde';
     }
-    
+
+    const { dimensiones, subcategoria_principal } = construirDimensionesEvaluacionClasica(
+      preguntas,
+      respuestas,
+      estado
+    );
+
     return {
       estado,
       puntaje: Math.min(rawScore * 2, 100),
@@ -551,7 +616,9 @@ export const analizarRespuestasOllama = async (
         'Mantén rutinas saludables de sueño y ejercicio',
         'Busca apoyo en familiares y amigos cercanos',
         'Considera hablar con un profesional si persisten las molestias'
-      ]
+      ],
+      dimensiones,
+      subcategoria_principal,
     };
   }
 };

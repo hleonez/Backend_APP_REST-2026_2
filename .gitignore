@@ -30,6 +30,7 @@ yarn-error.log*
 # Runtime
 .cache/
 .tmp/
+graphify-out/
 
 # OS
 Thumbs.db
