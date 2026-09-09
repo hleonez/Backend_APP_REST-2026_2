@@ -6,6 +6,10 @@ import { asignaciones } from '../db/schema';
 import { ASIGNACION_ESTADO } from '../shared/const/asignacion.const';
 import { ROLES } from '../shared/const/roles.const';
 
+/**
+ * Autoriza el acceso a un recurso de usuario solo al propio usuario (dueño) o a un admin.
+ * El rol psicólogo NO tiene acceso a recursos de usuarios ajenos mediante esta ruta.
+ */
 export const authorizeUserResource = (req: AuthRequest, res: Response, next: NextFunction): void => {
   const requestedUserId = Number(req.params.id);
   const authenticatedUser = req.user;
@@ -15,16 +19,18 @@ export const authorizeUserResource = (req: AuthRequest, res: Response, next: Nex
     return;
   }
 
-  if (
-    authenticatedUser.role === ROLES.ADMIN.nombre ||
-    authenticatedUser.role === 'admin' ||
-    authenticatedUser.id === requestedUserId
-  ) {
+  // Solo el dueño del recurso o un administrador puede acceder
+  const isOwner = authenticatedUser.id === requestedUserId;
+  const isAdminRole =
+    authenticatedUser.role === ROLES.ADMIN.nombre || authenticatedUser.role === 'admin';
+
+  if (isOwner || isAdminRole) {
     next();
     return;
   }
 
-  res.status(403).json({ message: 'No autorizado' });
+  // Psicólogos y cualquier otro rol no propietario → denegado
+  res.status(403).json({ message: 'No autorizado: solo el propietario o un administrador puede acceder a este recurso' });
 };
 
 /**
