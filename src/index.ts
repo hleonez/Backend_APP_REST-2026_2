@@ -33,6 +33,7 @@ import registroEmocionalRoutes from './routes/registro-emocional.routes';
 import dashboardRoutes from './routes/dashboard.routes';
 import settingsRoutes from './routes/settings.routes';
 import premiosRoutes from './routes/premios.routes';
+import onboardingRoutes from './routes/onboarding.routes';
 
 const app = express();
 const server = http.createServer(app);
@@ -91,6 +92,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/premios', premiosRoutes);
+app.use('/api/onboarding', onboardingRoutes);
 
 // ============================================================
 // Swagger

@@ -36,6 +36,13 @@
       "when": 1776200000000,
       "tag": "0004_semaforo_dimensiones",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1776400000000,
+      "tag": "0005_onboarding_usuario",
+      "breakpoints": true
     }
   ]
 }
