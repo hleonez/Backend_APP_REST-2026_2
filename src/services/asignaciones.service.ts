@@ -110,3 +110,141 @@ export const getMisSolicitudesService = async (estudianteId: number) => {
     ))
     .orderBy(desc(schema.asignaciones.solicitado_en));
 };
+
+/**
+ * Solicitudes pendientes dirigidas al psicólogo autenticado (buzón de entrada).
+ */
+export const getSolicitudesPsicologoService = async (psicologoId: number) => {
+  return db
+    .select()
+    .from(schema.asignaciones)
+    .where(and(
+      eq(schema.asignaciones.psicologo_id, psicologoId),
+      eq(schema.asignaciones.estado, ASIGNACION_ESTADO.PENDIENTE),
+      isNull(schema.asignaciones.deleted_at),
+    ))
+    .orderBy(desc(schema.asignaciones.solicitado_en));
+};
+
+/**
+ * Aprueba una solicitud pendiente dirigida al psicólogo autenticado.
+ *
+ * Reglas de negocio:
+ * - La solicitud debe existir, pertenecer al psicólogo autenticado y estar en estado 'pendiente'.
+ * - Al aprobar, se debe finalizar cualquier otra asignación 'aprobado' previa del mismo
+ *   estudiante (con otro psicólogo), porque el índice único parcial
+ *   `uq_asignaciones_estudiante_aprobado` solo permite UNA fila 'aprobado' por estudiante.
+ *   Si no se finaliza antes de aprobar, el INSERT/UPDATE revienta con 23505.
+ * - Todo dentro de una transacción para que ambos cambios (finalizar la vieja, aprobar la
+ *   nueva) sean atómicos.
+ */
+export const aprobarSolicitudService = async (asignacionId: number, psicologoId: number) => {
+  return db.transaction(async (tx) => {
+    const [solicitud] = await tx
+      .select()
+      .from(schema.asignaciones)
+      .where(and(
+        eq(schema.asignaciones.id, asignacionId),
+        isNull(schema.asignaciones.deleted_at),
+      ))
+      .limit(1);
+
+    if (!solicitud) {
+      const error = new Error('Solicitud no encontrada.');
+      (error as any).code = 'SOLICITUD_NO_ENCONTRADA';
+      throw error;
+    }
+
+    if (solicitud.psicologo_id !== psicologoId) {
+      const error = new Error('Esta solicitud no está dirigida a ti.');
+      (error as any).code = 'NO_AUTORIZADO';
+      throw error;
+    }
+
+    if (solicitud.estado !== ASIGNACION_ESTADO.PENDIENTE) {
+      const error = new Error(`La solicitud ya fue procesada (estado actual: ${solicitud.estado}).`);
+      (error as any).code = 'SOLICITUD_YA_PROCESADA';
+      throw error;
+    }
+
+    if (solicitud.estudiante_id === null) {
+      const error = new Error('La solicitud no tiene un estudiante asociado válido.');
+      (error as any).code = 'SOLICITUD_INVALIDA';
+      throw error;
+    }
+
+    // Finalizar cualquier asignación aprobada previa del estudiante (con cualquier psicólogo)
+    // ANTES de aprobar esta, para no violar el unique parcial.
+    await tx
+      .update(schema.asignaciones)
+      .set({ estado: ASIGNACION_ESTADO.FINALIZADO, finalizado_en: new Date() })
+      .where(and(
+        eq(schema.asignaciones.estudiante_id, solicitud.estudiante_id),
+        eq(schema.asignaciones.estado, ASIGNACION_ESTADO.APROBADO),
+        isNull(schema.asignaciones.deleted_at),
+      ));
+
+    const [actualizada] = await tx
+      .update(schema.asignaciones)
+      .set({ estado: ASIGNACION_ESTADO.APROBADO, procesado_en: new Date() })
+      .where(eq(schema.asignaciones.id, asignacionId))
+      .returning();
+
+    return actualizada;
+  });
+};
+
+/**
+ * Rechaza una solicitud pendiente dirigida al psicólogo autenticado.
+ */
+export const rechazarSolicitudService = async (asignacionId: number, psicologoId: number) => {
+  const [solicitud] = await db
+    .select()
+    .from(schema.asignaciones)
+    .where(and(
+      eq(schema.asignaciones.id, asignacionId),
+      isNull(schema.asignaciones.deleted_at),
+    ))
+    .limit(1);
+
+  if (!solicitud) {
+    const error = new Error('Solicitud no encontrada.');
+    (error as any).code = 'SOLICITUD_NO_ENCONTRADA';
+    throw error;
+  }
+
+  if (solicitud.psicologo_id !== psicologoId) {
+    const error = new Error('Esta solicitud no está dirigida a ti.');
+    (error as any).code = 'NO_AUTORIZADO';
+    throw error;
+  }
+
+  if (solicitud.estado !== ASIGNACION_ESTADO.PENDIENTE) {
+    const error = new Error(`La solicitud ya fue procesada (estado actual: ${solicitud.estado}).`);
+    (error as any).code = 'SOLICITUD_YA_PROCESADA';
+    throw error;
+  }
+
+  const [actualizada] = await db
+    .update(schema.asignaciones)
+    .set({ estado: ASIGNACION_ESTADO.RECHAZADO, procesado_en: new Date() })
+    .where(eq(schema.asignaciones.id, asignacionId))
+    .returning();
+
+  return actualizada;
+};
+
+/**
+ * Estudiantes actualmente activos (asignación 'aprobado') a cargo del psicólogo autenticado.
+ */
+export const getMisPacientesService = async (psicologoId: number) => {
+  return db
+    .select()
+    .from(schema.asignaciones)
+    .where(and(
+      eq(schema.asignaciones.psicologo_id, psicologoId),
+      eq(schema.asignaciones.estado, ASIGNACION_ESTADO.APROBADO),
+      isNull(schema.asignaciones.deleted_at),
+    ))
+    .orderBy(desc(schema.asignaciones.procesado_en));
+};
