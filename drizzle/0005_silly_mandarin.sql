@@ -9,11 +9,11 @@ CREATE TABLE IF NOT EXISTS "semaforo_dimensiones" (
 	"deleted_at" timestamp
 );
 --> statement-breakpoint
-ALTER TABLE "evaluaciones" ADD COLUMN "subcategoria_principal" varchar(80);--> statement-breakpoint
-ALTER TABLE "mensajes_chat" ADD COLUMN "sentimiento" varchar(10);--> statement-breakpoint
-ALTER TABLE "mensajes_chat" ADD COLUMN "confianza" numeric(5, 3);--> statement-breakpoint
-ALTER TABLE "mensajes_chat" ADD COLUMN "sentimiento_scores" jsonb;--> statement-breakpoint
-ALTER TABLE "preguntas_registro_emocional" ADD COLUMN "categoria" varchar(80) DEFAULT 'general' NOT NULL;--> statement-breakpoint
+ALTER TABLE "evaluaciones" ADD COLUMN IF NOT EXISTS "subcategoria_principal" varchar(80);--> statement-breakpoint
+ALTER TABLE "mensajes_chat" ADD COLUMN IF NOT EXISTS "sentimiento" varchar(10);--> statement-breakpoint
+ALTER TABLE "mensajes_chat" ADD COLUMN IF NOT EXISTS "confianza" numeric(5, 3);--> statement-breakpoint
+ALTER TABLE "mensajes_chat" ADD COLUMN IF NOT EXISTS "sentimiento_scores" jsonb;--> statement-breakpoint
+ALTER TABLE "preguntas_registro_emocional" ADD COLUMN IF NOT EXISTS "categoria" varchar(80) DEFAULT 'general' NOT NULL;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_semaforo_dimensiones_evaluacion_id" ON "semaforo_dimensiones" ("evaluacion_id");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_semaforo_dimensiones_dimension" ON "semaforo_dimensiones" ("dimension");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_preguntas_registro_emocional_categoria" ON "preguntas_registro_emocional" ("categoria");--> statement-breakpoint
