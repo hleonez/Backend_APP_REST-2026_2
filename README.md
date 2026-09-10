@@ -117,6 +117,222 @@ Debe devolver algo como:
 - `SENTIMENT_API_URL`: URL del microservicio. En Docker Compose se resuelve a `http://sentiment:8000`. Para desarrollo local fuera de Docker apunta a `http://localhost:8000`.
 - `TRANSFORMERS_CACHE`: dentro del contenedor apunta al volumen `hf_cache`.
 
+## Fase 8: Flujo de pruebas end-to-end
+
+Esta sección documenta cómo probar la Fase 8 completa: microservicio de sentimiento, chatbot IA con sentimiento persistido, onboarding y encuesta adaptativa. Todos los endpoints, campos y respuestas descritos existen en el código (`src/routes/`, `src/controllers/`, `src/services/`, `sentiment/`).
+
+### 0) Obtener un token JWT
+
+Los endpoints de chat y registro emocional exigen autenticación. Se usa el flujo real de `POST /api/auth/register` y `POST /api/auth/login`.
+
+```bash
+# Registro (campos obligatorios según registerSchema en auth.controller.ts)
+curl -X POST http://localhost:3000/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "nombres": "Samuel",
+    "apellidos": "León",
+    "correo": "samuel@example.com",
+    "contrasena": "password123",
+    "telefono": "3001234567",
+    "ciudad": "Bogotá",
+    "edad": 20
+  }'
+```
+
+```bash
+# Login (para reutilizar el token)
+curl -X POST http://localhost:3000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"correo": "samuel@example.com", "contrasena": "password123"}'
+```
+
+Ambos devuelven `{ "message": "...", "user": { ... }, "token": "<JWT>" }`. Usa ese token como cabecera `Authorization: Bearer <token>` en todos los pasos siguientes.
+
+### A) Iniciar y verificar el microservicio de sentimiento
+
+El servicio es una app FastAPI en `sentiment/` que escucha en el puerto `8000` (ver `sentiment/Dockerfile` y `sentiment/app/main.py`).
+
+Opción 1 — Docker (override de desarrollo que expone el puerto 8000):
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build sentiment
+docker compose ps sentiment
+```
+
+Opción 2 — Sin Docker (la imagen se construye desde `python:3.10-slim`, pero basta con Python 3.10+ y las dependencias de `sentiment/requirements.txt`):
+
+```bash
+cd sentiment
+pip install -r requirements.txt
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+Comprobar que responde:
+
+```bash
+# Health (GET /health)
+curl http://localhost:8000/health
+# {"status":"ok"}
+
+# Análisis de sentimiento (POST /analyze, body: {"texto": "..."})
+curl -X POST http://localhost:8000/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"texto":"Hoy me fue súper mal en el parcial 😭"}'
+# {"label":"NEG","scores":{"NEG":0.97,"NEU":0.02,"POS":0.01}}
+```
+
+La primera arrancada tarda (~60s) porque descarga el modelo RoBERTuito de HuggingFace; en Docker el healthcheck pega a `GET /health` con `start_period` de 60s (ver `docker-compose.yml`).
+
+### B) Enviar un mensaje al chatbot y verificar que el sentimiento queda almacenado
+
+Endpoint real: `POST /api/chats/ia`.
+
+```bash
+curl -X POST http://localhost:3000/api/chats/ia \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{"mensaje":"No he podido dormir por culpa de los parciales"}'
+```
+
+Respuesta esperada (HTTP 201, envoltura `APISuccessResponse`):
+
+```json
+{
+  "success": true,
+  "message": "Chat completado exitosamente",
+  "data": {
+    "usuario_id": 1,
+    "chat_id": 1,
+    "mensaje_usuario": "No he podido dormir por culpa de los parciales",
+    "respuesta_ia": "...",
+    "timestamp": "...",
+    "requiere_salvavidas": false,
+    "nivel_alerta": "normal",
+    "coincidencias_alerta": [],
+    "chat_salvavidas_id": null,
+    "psicologo_asignado_id": null,
+    "mensaje_sistema": null
+  },
+  "errors": null
+}
+```
+
+El mensaje del usuario se guarda en `mensajes_chat` con las columnas `sentimiento`, `confianza` y `sentimiento_scores` (ver `src/db/schema.ts`, líneas 518-520). Estas columnas no se devuelven en el historial de chat (`GET /api/chats/ia/historial` devuelve `id`, `mensaje`, `enviado_en`), así que se verifican directamente en Postgres:
+
+```bash
+docker compose exec postgres psql -U postgres -d mental_health_app -c \
+  "SELECT id, mensaje, sentimiento, confianza, sentimiento_scores
+   FROM mensajes_chat
+   WHERE usuario_id = <TU_USUARIO_ID> AND sentimiento IS NOT NULL
+   ORDER BY id DESC LIMIT 2;"
+```
+
+Se debe ver `sentimiento` igual a `NEG`, `NEU` o `POS`; `confianza` como número; y `sentimiento_scores` como `{"NEG":..., "NEU":..., "POS":...}`. En los logs de la app (`docker compose logs -f app`) aparecerá `[NOA DEBUG] Sentimiento label=...;confianza=...;origen=...`.
+
+Nota sobre el fallback: si el servicio no responde en 2s, `analizarSentimiento` (`src/services/sentimiento.service.ts`) devuelve un fallback seguro `{ label: "NEU", confianza: 0, scores: {"NEG":0, "NEU":1, "POS":0}, origen: "fallback" }` y el chatbot continúa sin romperse.
+
+### C) Completar el onboarding
+
+El onboarding no es un endpoint independiente: es un estado del flujo del chatbot. Se determina en `chatConIAUnificado` (`src/controllers/chat.controller.ts`) con `onboarding_base.length === 0`, donde `onboarding_base` son las dimensiones de la última evaluación del usuario (`obtenerDimensionesUltimaEvaluacion` en `src/services/contexto-bienestar.service.ts`). Mientras el usuario no tenga ninguna `evaluaciones`, el chatbot responde en modo onboarding e invita a "evaluar tu estado emocional".
+
+Para completarlo se usa el flujo real de evaluación:
+
+1) Obtener las preguntas (endpoint público `GET /api/evaluaciones/preguntas`):
+
+```bash
+curl http://localhost:3000/api/evaluaciones/preguntas
+# [{"id":1,"texto":"...","peso":1,"created_at":"...","updated_at":"...","deleted_at":null}]
+```
+
+2) Enviar la evaluación con las respuestas (`POST /api/evaluaciones`) — `respuesta` va de 1 a 5:
+
+```bash
+curl -X POST http://localhost:3000/api/evaluaciones \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{
+    "respuestas": [
+      {"pregunta_id": 1, "respuesta": 4},
+      {"pregunta_id": 2, "respuesta": 3}
+    ],
+    "observaciones": "Estoy manejando mejor el estrés"
+  }'
+```
+
+Respuesta esperada (201): `message`, `evaluacion` (con `puntaje_total`, `estado_semaforo`, `subcategoria_principal` y `dimensiones`) y `analisis`.
+
+3) (Opcional) Asignar el semáforo (`POST /api/evaluaciones/asignacion-semaforo`); el body `{"puntaje_manual": <0-100>}` es opcional:
+
+```bash
+curl -X POST http://localhost:3000/api/evaluaciones/asignacion-semaforo \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{}'
+# 200: { "message": "...", "data": { "usuario_id": 1, "estado_semaforo": "verde|amarillo|rojo", "puntaje_total": ..., "subcategoria_principal": ..., "dimensiones": [...], "evaluacion": { ... } } }
+```
+
+Verificación: vuelve a enviar un mensaje a `POST /api/chats/ia`. Con al menos una evaluación creada, `onboarding_base.length > 0` y el chatbot deja el modo onboarding. También se puede confirmar la evaluación en Postgres:
+
+```bash
+docker compose exec postgres psql -U postgres -d mental_health_app -c \
+  "SELECT id, puntaje_total, estado_semaforo, subcategoria_principal
+   FROM evaluaciones WHERE usuario_id = <TU_USUARIO_ID> ORDER BY id DESC LIMIT 1;"
+```
+
+### D) Ejecutar la encuesta adaptativa
+
+No existe un endpoint "iniciar encuesta": primero se obtienen preguntas adaptativas (según la dimensión dominante del usuario) y luego se guardan las respuestas.
+
+1) Obtener las preguntas adaptativas (`GET /api/registro-emocional/preguntas`):
+
+```bash
+curl http://localhost:3000/api/registro-emocional/preguntas \
+  -H "Authorization: Bearer <token>"
+```
+
+Respuesta esperada (200): `APISuccessResponse` cuyo `data` es un arreglo de 5 preguntas, cada una con `id`, `texto`, `categoria`, `is_active`, `created_at`, `updated_at` y `opciones` (cada opción con `id`, `nombre`, `descripcion`, `url_imagen`, `puntaje`, `is_active`).
+
+2) Por cada pregunta devuelta, escoger el `id` de una de sus `opciones`.
+
+3) Guardar las respuestas (`POST /api/registro-emocional`) — `usuario_id` debe coincidir con el usuario del token y cada `opcion_id` debe pertenecer a su `pregunta_id`:
+
+```bash
+curl -X POST http://localhost:3000/api/registro-emocional \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{
+    "usuario_id": 1,
+    "respuestas": [
+      {"pregunta_id": 1, "opcion_id": 3},
+      {"pregunta_id": 2, "opcion_id": 7},
+      {"pregunta_id": 3, "opcion_id": 11},
+      {"pregunta_id": 4, "opcion_id": 14},
+      {"pregunta_id": 5, "opcion_id": 18}
+    ]
+  }'
+```
+
+Respuesta esperada (201, `APISuccessResponse`):
+
+```json
+{
+  "success": true,
+  "message": "Respuestas de registro emocional guardadas",
+  "data": {
+    "usuario_id": 1,
+    "fecha_dia": "2026-09-09",
+    "registro_del_dia": true,
+    "total_puntaje": 16,
+    "respuestas_guardadas": 5,
+    "respuestas": [ ... ]
+  },
+  "errors": null
+}
+```
+
+Códigos de error reales: `400` body inválido, `403` si `usuario_id` no coincide con el token y `409` si ya se completó el test emocional del día.
+
 ## Base de datos (Drizzle ORM)
 
 ### Migraciones automáticas al iniciar

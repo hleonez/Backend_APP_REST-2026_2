@@ -38,6 +38,8 @@ usuarios (1) ---< fallas_tecnicas (N)
 usuarios (1) ---< chats (estudiante_id) (N)
 usuarios (1) ---< chats (psicologo_id) (N)
 usuarios (1) ---< mensajes_chat (N)
+usuarios (1) ---< asignaciones (estudiante_id) (N)
+usuarios (1) ---< asignaciones (psicologo_id) (N)
 chats (1) ---< mensajes_chat (N)
 evaluaciones (1) ---< respuestas (N)
 evaluaciones (1) ---< evaluaciones_respuestas_usuarios (N)
@@ -49,8 +51,6 @@ preguntas_registro_emocional (1) ---< registro_emocional (N)
 opciones_registro_emocional (1) ---< registro_emocional (N)
 opciones_registro_actividades (1) ---< registro_actividades_usuarios (N)
 premios (1) ---< solicitudes_premios (N)
-usuarios (1) ---< asignaciones (estudiante_id) (N)
-usuarios (1) ---< asignaciones (psicologo_id) (N)
 ```
 
 ---
@@ -102,6 +102,10 @@ Usuarios del sistema. Pueden ser estudiantes, psicólogos o administradores seg�
 | `fecha_nacimiento` | `date` | nullable | — |
 | `idioma` | `varchar(255)` | nullable | — |
 | `especialidad_psicologo` | `varchar(255)` | nullable (solo psicólogos) | — |
+| `streak_goal_days` | `integer` | NOT NULL (compromiso de racha) | `7` |
+| `streak_count` | `integer` | NOT NULL (racha actual) | `0` |
+| `streak_last_date` | `date` | nullable (última racha) | — |
+| `streak_goal_set` | `boolean` | NOT NULL (si definió meta) | `false` |
 | `fecha_registro` | `timestamp` | NOT NULL | `now()` |
 | `is_active` | `boolean` | NOT NULL | `true` |
 | `created_at` | `timestamp` | NOT NULL | `now()` |
@@ -126,7 +130,7 @@ Evaluaciones psicológicas que genera el sistema de semáforo emocional. Núcleo
 | `puntaje_total` | `integer` | nullable | — |
 | `estado_semaforo` | `varchar(50)` | nullable (`verde`, `amarillo`, `rojo`) | — |
 | `observaciones` | `text` | nullable | — |
-| `subcategoria_principal` | `varchar(80)` | nullable (Fase 5, formato `<color>_<dimension>`) | — |
+| `subcategoria_principal` | `varchar(80)` | nullable — formato `` `${color}_${dimension_dominante}` `` (ej. `rojo_ansiedad`). Fase 5. | — |
 | `created_at` | `timestamp` | NOT NULL | `now()` |
 | `updated_at` | `timestamp` | NOT NULL | `now()` |
 | `deleted_at` | `timestamp` | nullable | — |
@@ -263,14 +267,14 @@ Respuestas de usuarios a las encuestas.
 
 ### 9. `preguntas_registro_emocional`
 
-Preguntas para el registro emocional diario. Se sembraron inicialmente 20 preguntas.
+Preguntas para el registro emocional diario. Originalmente se sembraron 20 preguntas; la Fase 5 amplió el pool con 3 preguntas nuevas por cada una de las 7 dimensiones (21 adicionales), etiquetando además la dimensión de cada pregunta del catálogo.
 
 | Campo | Tipo | Restricciones | Por Defecto |
 |---|---|---|---|
 | `id` | `serial` | PK | auto-increment |
 | `texto` | `text` | NOT NULL, **UNIQUE** | — |
 | `is_active` | `boolean` | NOT NULL | `true` |
-| `categoria` | `varchar(80)` | NOT NULL (Fase 5, dimensión evaluada) | `'general'` |
+| `categoria` | `varchar(80)` | NOT NULL — dimensión evaluada por la pregunta (`ansiedad`, `estres_academico`, `humor_depresivo`, `sueno`, `relaciones_sociales`, `autoestima_autocuidado`, `energia_motivacion`). Fase 5. | `'general'` |
 | `created_at` | `timestamp` | NOT NULL | `now()` |
 | `updated_at` | `timestamp` | NOT NULL | `now()` |
 | `deleted_at` | `timestamp` | nullable | — |
@@ -480,6 +484,9 @@ Mensajes individuales dentro de un chat.
 | `chat_id` | `integer` | FK → `chats.id` | nullable |
 | `usuario_id` | `integer` | FK → `usuarios.id` | nullable |
 | `mensaje` | `text` | NOT NULL | — |
+| `sentimiento` | `varchar(10)` | nullable — `'NEG' \| 'NEU' \| 'POS'`. Solo se completa para mensajes del estudiante analizados por el encoder o su fallback seguro. Fase 2. | — |
+| `confianza` | `numeric(5,3)` | nullable — confianza del label detectado (0–1). Fase 2. | — |
+| `sentimiento_scores` | `jsonb` | nullable — objeto `{ NEG, NEU, POS }` con los tres puntajes. Fase 2. | — |
 | `enviado_en` | `timestamp` | NOT NULL | `now()` |
 | `created_at` | `timestamp` | NOT NULL | `now()` |
 | `updated_at` | `timestamp` | NOT NULL | `now()` |
@@ -672,7 +679,7 @@ Relación N:N con historial entre estudiantes y psicólogos. Cada registro repre
 
 | Propósito | Ruta |
 |---|---|
-| Esquema completo de la BD (22 tablas) | `src/db/schema.ts` |
+| Esquema completo de la BD (23 tablas) | `src/db/schema.ts` |
 | Conexión y configuración de Drizzle ORM | `src/db/index.ts` |
 | Script de migraciones | `src/db/migrate.ts` |
 | Datos semilla | `src/db/seed.ts` |

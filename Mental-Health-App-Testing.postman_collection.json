@@ -665,6 +665,258 @@
           }
         }
       ]
+    },
+    {
+      "name": "FASE 8 — CONFIGURACIÓN Y PRUEBAS",
+      "description": "Flujos de prueba de Fase 8: microservicio de sentimiento, chatbot con sentimiento persistido, onboarding y encuesta adaptativa. Ejecutar antes la carpeta AUTH - Logins para poblar las variables {{token-usuario}} y {{usuarioId}}.",
+      "item": [
+        {
+          "name": "1. SENTIMENT — INICIO / VERIFICACIÓN",
+          "item": [
+            {
+              "name": "1.1 SENTIMENT - Health (GET /health)",
+              "request": {
+                "method": "GET",
+                "description": "Verifica que el microservicio de sentimiento (FastAPI en sentiment/, puerto 8000) esté activo.\n\nLevantarlo (override de desarrollo que expone el puerto 8000):\n  docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build sentiment\n\nRespuesta esperada (200):\n  {\"status\":\"ok\"}",
+                "url": {
+                  "raw": "http://localhost:8000/health",
+                  "protocol": "http",
+                  "host": ["localhost"],
+                  "port": "8000",
+                  "path": ["health"]
+                }
+              }
+            },
+            {
+              "name": "1.2 SENTIMENT - Analyze (POST /analyze)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {"key": "Content-Type", "value": "application/json"}
+                ],
+                "description": "Prueba el encoder de sentimiento (pysentimiento/RoBERTuito, sentiment/app/main.py).\n\nRespuesta esperada (200):\n  {\"label\":\"NEG|NEU|POS\",\"scores\":{\"NEG\":0.97,\"NEU\":0.02,\"POS\":0.01}}\n\nSi el modelo aún no termina de cargar responde 503 {\"detail\":\"Modelo aún no disponible\"}.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"texto\":\"Hoy me fue súper mal en el parcial\"}"
+                },
+                "url": {
+                  "raw": "http://localhost:8000/analyze",
+                  "protocol": "http",
+                  "host": ["localhost"],
+                  "port": "8000",
+                  "path": ["analyze"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. CHATBOT + SENTIMIENTO PERSISTIDO",
+          "item": [
+            {
+              "name": "2.1 POST /api/chats/ia (Chatbot con sentimiento persistido)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 201) {",
+                      "    console.log('✅ Respuesta IA recibida');",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {"key": "Authorization", "value": "Bearer {{token-usuario}}"},
+                  {"key": "Content-Type", "value": "application/json"}
+                ],
+                "description": "Envía un mensaje real al chatbot IA (POST /api/chats/ia). Internamente (chat.controller.ts -> guardarInteraccionIA) el mensaje del usuario se procesa con analizarSentimiento y el resultado se persiste en la tabla mensajes_chat en las columnas:\n  - sentimiento (NEG | NEU | POS)\n  - confianza (número)\n  - sentimiento_scores (objeto { NEG, NEU, POS })\n\nIMPORTANTE: el historial del chatbot (GET /api/chats/ia/historial) NO expone esos campos por API, por lo que la comprobación de que el sentimiento quedó almacenado se realiza mediante consulta SQL a PostgreSQL (Postman no accede directamente a la base de datos):\n\n  docker compose exec postgres psql -U postgres -d mental_health_app -c \"SELECT id, mensaje, sentimiento, confianza, sentimiento_scores FROM mensajes_chat WHERE usuario_id = <TU_USUARIO_ID> AND sentimiento IS NOT NULL ORDER BY id DESC LIMIT 2;\"\n\nTambién puede verse en los logs de la app: [NOA DEBUG] Sentimiento label=...;confianza=...;origen=...\n\nSi el servicio de sentimiento no responde en 2s, analizarSentimiento usa un fallback seguro (label NEU, confianza 0) y el chatbot continúa.\n\nRespuesta esperada (201):\n  { \"success\": true, \"message\": \"Chat completado exitosamente\", \"data\": { \"usuario_id\", \"chat_id\", \"mensaje_usuario\", \"respuesta_ia\", \"timestamp\", \"requiere_salvavidas\", \"nivel_alerta\", \"coincidencias_alerta\", \"chat_salvavidas_id\", \"psicologo_asignado_id\", \"mensaje_sistema\" }, \"errors\": null }",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\"mensaje\":\"No he podido dormir por culpa de los parciales\"}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "http://localhost:3000/api/chats/ia",
+                  "protocol": "http",
+                  "host": ["localhost"],
+                  "port": "3000",
+                  "path": ["api", "chats", "ia"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "3. ONBOARDING (estado del chatbot — no es un endpoint)",
+          "description": "El onboarding NO es un endpoint. Es un estado del chatbot: mientras onboarding_base (dimensiones de la última evaluación del usuario) esté vacío, el chatbot responde en modo onboarding e invita a evaluar el estado emocional. Completar la evaluación hace que el chatbot salga de ese estado.",
+          "item": [
+            {
+              "name": "3.1 GET Preguntas de Evaluación (público)",
+              "request": {
+                "method": "GET",
+                "description": "El onboarding en este proyecto NO es un endpoint independiente: es un estado del flujo del chatbot. En chat.controller.ts el bot responde en modo onboarding mientras onboarding_base.length === 0, donde onboarding_base son las dimensiones de la última evaluación del usuario (contexto-bienestar.service.ts).\n\nEste request obtiene las preguntas reales de la evaluación (endpoint público GET /api/evaluaciones/preguntas). Respuesta esperada (200): [ { \"id\": 1, \"texto\": \"...\", \"peso\": 1, ... } ].",
+                "url": {
+                  "raw": "http://localhost:3000/api/evaluaciones/preguntas",
+                  "protocol": "http",
+                  "host": ["localhost"],
+                  "port": "3000",
+                  "path": ["api", "evaluaciones", "preguntas"]
+                }
+              }
+            },
+            {
+              "name": "3.2 POST Crear Evaluación (completa el onboarding)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 201) {",
+                      "    var jsonData = pm.response.json();",
+                      "    console.log('✅ Evaluación creada. estado_semaforo=' + (jsonData.evaluacion?.estado_semaforo || '-'));",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {"key": "Authorization", "value": "Bearer {{token-usuario}}"},
+                  {"key": "Content-Type", "value": "application/json"}
+                ],
+                "description": "Crea la primera evaluación del usuario. Al existir al menos una evaluación, onboarding_base deja de estar vacío y el chatbot abandona el estado inicial de onboarding.\n\nRespuesta esperada (201): { \"message\": \"...\", \"evaluacion\": { \"puntaje_total\": ..., \"estado_semaforo\": \"...\", \"subcategoria_principal\": \"...\", \"dimensiones\": [...] }, \"analisis\": { ... } }. El campo respuesta va de 1 a 5.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"respuestas\": [\n    {\"pregunta_id\": 1, \"respuesta\": 3}\n  ],\n  \"observaciones\": \"Primera evaluación de prueba (completa el onboarding)\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "http://localhost:3000/api/evaluaciones",
+                  "protocol": "http",
+                  "host": ["localhost"],
+                  "port": "3000",
+                  "path": ["api", "evaluaciones"]
+                }
+              }
+            },
+            {
+              "name": "3.3 POST Asignación Semáforo (opcional)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {"key": "Authorization", "value": "Bearer {{token-usuario}}"},
+                  {"key": "Content-Type", "value": "application/json"}
+                ],
+                "description": "Opcional dentro del flujo de onboarding: asigna el estado de semáforo del usuario autenticado combinando su última evaluación y su registro emocional. Body opcional: { \"puntaje_manual\": 0 } (0-100).\n\nRespuesta esperada (200): { \"message\": \"...\", \"data\": { \"usuario_id\": 1, \"estado_semaforo\": \"verde|amarillo|rojo\", \"puntaje_total\": ..., \"subcategoria_principal\": ..., \"dimensiones\": [...], \"evaluacion\": { ... } } }.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "http://localhost:3000/api/evaluaciones/asignacion-semaforo",
+                  "protocol": "http",
+                  "host": ["localhost"],
+                  "port": "3000",
+                  "path": ["api", "evaluaciones", "asignacion-semaforo"]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "4. ENCUESTA ADAPTATIVA",
+          "item": [
+            {
+              "name": "4.1 GET Preguntas Adaptativas",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "var jsonData = pm.response.json();",
+                      "if (jsonData.data && jsonData.data.length > 0) {",
+                      "    console.log('✅ Preguntas adaptativas recibidas: ' + jsonData.data.length);",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [
+                  {"key": "Authorization", "value": "Bearer {{token-usuario}}"}
+                ],
+                "description": "Obtiene las preguntas adaptativas del registro emocional (encuesta adaptativa). Respuesta esperada (200): APISuccessResponse cuya data es un arreglo de 5 preguntas, cada una con id, texto, categoria, is_active, created_at, updated_at y opciones (cada opción con id, nombre, descripcion, url_imagen, puntaje, is_active).\n\nUsa los ids devueltos (el id de cada pregunta y el id de una de sus opciones) para construir el body del request 4.2 (POST /api/registro-emocional).",
+                "url": {
+                  "raw": "http://localhost:3000/api/registro-emocional/preguntas",
+                  "protocol": "http",
+                  "host": ["localhost"],
+                  "port": "3000",
+                  "path": ["api", "registro-emocional", "preguntas"]
+                }
+              }
+            },
+            {
+              "name": "4.2 POST Guardar Respuestas Encuesta Adaptativa",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "if (pm.response.code === 201) {",
+                      "    var jsonData = pm.response.json();",
+                      "    console.log('✅ Registro guardado. total_puntaje=' + jsonData.data.total_puntaje + ', respuestas_guardadas=' + jsonData.data.respuestas_guardadas);",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {"key": "Authorization", "value": "Bearer {{token-usuario}}"},
+                  {"key": "Content-Type", "value": "application/json"}
+                ],
+                "description": "Guarda las respuestas de la encuesta adaptativa (mínimo 1 respuesta). Cada opcion_id debe pertenecer al pregunta_id de la pregunta devuelta por el request 4.1 (GET /api/registro-emocional/preguntas).\n\nRespuesta esperada (201): { \"success\": true, \"message\": \"Respuestas de registro emocional guardadas\", \"data\": { \"usuario_id\": 1, \"fecha_dia\": \"2026-09-09\", \"registro_del_dia\": true, \"total_puntaje\": ..., \"respuestas_guardadas\": N, \"respuestas\": [...] }, \"errors\": null }\n\nCódigos de error reales: 400 body inválido, 403 si usuario_id no coincide con el token autenticado, 409 si ya se completó el test emocional del día.",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"usuario_id\": {{usuarioId}},\n  \"respuestas\": [\n    {\"pregunta_id\": 1, \"opcion_id\": 2}\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "http://localhost:3000/api/registro-emocional",
+                  "protocol": "http",
+                  "host": ["localhost"],
+                  "port": "3000",
+                  "path": ["api", "registro-emocional"]
+                }
+              }
+            }
+          ]
+        }
+      ]
     }
   ],
   "variable": [
