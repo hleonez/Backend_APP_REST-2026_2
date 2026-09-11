@@ -35,6 +35,7 @@ import settingsRoutes from './routes/settings.routes';
 import premiosRoutes from './routes/premios.routes';
 import psicologosRoutes from './routes/psicologos.routes' ;
 import asignacionesRoutes from './routes/asignaciones.routes';
+import panelPsicologoRoutes from './routes/panel-psicologo.routes';
 
 const app = express();
 const server = http.createServer(app);
@@ -95,6 +96,7 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/premios', premiosRoutes);
 app.use('/api/psicologos', psicologosRoutes);
 app.use('/api/asignaciones', asignacionesRoutes);
+app.use('/api/psicologo', panelPsicologoRoutes);
 
 // ============================================================
 // Swagger
