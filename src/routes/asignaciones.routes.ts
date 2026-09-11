@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticate, isUsuario, isPsicologo } from '../middleware/auth.middleware';
-import { solicitarAsignacion, misSolicitudes, solicitudesPsicologo, aprobarSolicitud, rechazarSolicitud, misPacientes } from '../controllers/asignaciones.controller';
+import { solicitarAsignacion, misSolicitudes, solicitudesPsicologo, aprobarSolicitud, rechazarSolicitud, misPacientes, finalizarAsignacion } from '../controllers/asignaciones.controller';
 
 const router = Router();
 
@@ -45,5 +45,12 @@ router.patch('/:id/aprobar', authenticate, isPsicologo, aprobarSolicitud);
  * @access Private (Psicólogo)
  */
 router.patch('/:id/rechazar', authenticate, isPsicologo, rechazarSolicitud);
+
+/**
+ * @route DELETE /api/asignaciones/:id
+ * @desc Finaliza o cancela una asignación (estudiante o psicólogo)
+ * @access Private
+ */
+router.delete('/:id', authenticate, finalizarAsignacion);
 
 export default router;
