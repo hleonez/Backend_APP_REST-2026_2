@@ -4,6 +4,8 @@ import { esPsicologoDeEstudiante } from '../middleware/authorization.middleware'
 import {
   getPerfilEstudiante,
   getResumenEstudiante,
+  getEvaluacionesEstudiante,
+  getActividadesEstudiante,
 } from '../controllers/panel-psicologo.controller';
 
 const router = Router();
@@ -37,6 +39,32 @@ router.get(
   isPsicologo,
   esPsicologoDeEstudiante,
   getResumenEstudiante
+);
+
+/**
+ * @route   GET /api/psicologo/pacientes/:estudianteId/evaluaciones
+ * @desc    Historial completo de evaluaciones (semáforos y puntajes), con dimensiones
+ * @access  Psicólogo con asignación activa
+ */
+router.get(
+  '/pacientes/:estudianteId/evaluaciones',
+  authenticate,
+  isPsicologo,
+  esPsicologoDeEstudiante,
+  getEvaluacionesEstudiante
+);
+
+/**
+ * @route   GET /api/psicologo/pacientes/:estudianteId/actividades
+ * @desc    Historial completo de actividades y sus vencimientos (vigentes y vencidas)
+ * @access  Psicólogo con asignación activa
+ */
+router.get(
+  '/pacientes/:estudianteId/actividades',
+  authenticate,
+  isPsicologo,
+  esPsicologoDeEstudiante,
+  getActividadesEstudiante
 );
 
 export default router;

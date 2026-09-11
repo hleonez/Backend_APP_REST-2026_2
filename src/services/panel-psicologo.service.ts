@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, isNull } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNull } from 'drizzle-orm';
 import { db } from '../db';
 import * as schema from '../db/schema';
 
@@ -55,6 +55,30 @@ export interface ResumenEstudiante {
   perfil: PerfilEstudiante;
   ultima_evaluacion: UltimaEvaluacion | null;
   actividades_vigentes: ActividadVigente[];
+}
+
+export interface EvaluacionHistorial {
+  id: number;
+  fecha: Date;
+  puntaje_total: number | null;
+  estado_semaforo: string | null;
+  subcategoria_principal: string | null;
+  observaciones: string | null;
+  dimensiones: DimensionSemaforo[];
+}
+
+export interface ActividadHistorial {
+  id: number;
+  fecha: Date;
+  vencimiento: Date;
+  vencida: boolean;
+  observaciones: string | null;
+  opcion: {
+    id: number;
+    nombre: string;
+    url_imagen: string;
+    descripcion: string | null;
+  } | null;
 }
 
 // ============================================================
@@ -216,4 +240,138 @@ export const getResumenEstudianteService = async (
   }));
 
   return { perfil, ultima_evaluacion, actividades_vigentes };
+};
+
+// ============================================================
+// Servicio: Historial de evaluaciones (semáforos y puntajes)
+// ============================================================
+
+/**
+ * Retorna el historial completo de evaluaciones del estudiante, cada una con
+ * sus dimensiones de semáforo, ordenadas de más reciente a más antigua.
+ *
+ * Precondición: el estudiante debe existir (usa el mismo check que perfil/resumen).
+ *
+ * @throws Error con code 'ESTUDIANTE_NO_ENCONTRADO' si el estudiante no existe.
+ */
+export const getEvaluacionesEstudianteService = async (
+  estudianteId: number
+): Promise<EvaluacionHistorial[]> => {
+  // Valida existencia del estudiante (misma regla que el resto del panel)
+  await getPerfilEstudianteService(estudianteId);
+
+  const evaluacionesRaw = await db
+    .select({
+      id: schema.evaluaciones.id,
+      fecha: schema.evaluaciones.fecha,
+      puntaje_total: schema.evaluaciones.puntaje_total,
+      estado_semaforo: schema.evaluaciones.estado_semaforo,
+      subcategoria_principal: schema.evaluaciones.subcategoria_principal,
+      observaciones: schema.evaluaciones.observaciones,
+    })
+    .from(schema.evaluaciones)
+    .where(
+      and(
+        eq(schema.evaluaciones.usuario_id, estudianteId),
+        isNull(schema.evaluaciones.deleted_at)
+      )
+    )
+    .orderBy(desc(schema.evaluaciones.fecha));
+
+  if (evaluacionesRaw.length === 0) {
+    return [];
+  }
+
+  const evaluacionIds = evaluacionesRaw.map((e) => e.id);
+
+  const dimensionesRaw = await db
+    .select({
+      id: schema.semaforo_dimensiones.id,
+      evaluacion_id: schema.semaforo_dimensiones.evaluacion_id,
+      dimension: schema.semaforo_dimensiones.dimension,
+      puntaje: schema.semaforo_dimensiones.puntaje,
+      nivel: schema.semaforo_dimensiones.nivel,
+    })
+    .from(schema.semaforo_dimensiones)
+    .where(
+      and(
+        inArray(schema.semaforo_dimensiones.evaluacion_id, evaluacionIds),
+        isNull(schema.semaforo_dimensiones.deleted_at)
+      )
+    );
+
+  const dimensionesPorEvaluacion = new Map<number, DimensionSemaforo[]>();
+  for (const d of dimensionesRaw) {
+    if (d.evaluacion_id === null) continue;
+    const lista = dimensionesPorEvaluacion.get(d.evaluacion_id) ?? [];
+    lista.push({ id: d.id, dimension: d.dimension, puntaje: d.puntaje, nivel: d.nivel });
+    dimensionesPorEvaluacion.set(d.evaluacion_id, lista);
+  }
+
+  return evaluacionesRaw.map((e) => ({
+    ...e,
+    dimensiones: dimensionesPorEvaluacion.get(e.id) ?? [],
+  }));
+};
+
+// ============================================================
+// Servicio: Historial de actividades y vencimientos
+// ============================================================
+
+/**
+ * Retorna el historial completo de actividades del estudiante (vigentes y
+ * vencidas), con su fecha de registro y vencimiento, ordenadas de más
+ * reciente a más antigua por vencimiento.
+ *
+ * @throws Error con code 'ESTUDIANTE_NO_ENCONTRADO' si el estudiante no existe.
+ */
+export const getActividadesEstudianteService = async (
+  estudianteId: number
+): Promise<ActividadHistorial[]> => {
+  await getPerfilEstudianteService(estudianteId);
+
+  const ahora = new Date();
+
+  const actividadesRaw = await db
+    .select({
+      id: schema.registro_actividades_usuarios.id,
+      fecha: schema.registro_actividades_usuarios.fecha,
+      vencimiento: schema.registro_actividades_usuarios.vencimiento,
+      observaciones: schema.registro_actividades_usuarios.observaciones,
+      opcion_id: schema.registro_actividades_usuarios.opcion_id,
+      opcion_nombre: schema.opciones_registro_actividades.nombre,
+      opcion_url_imagen: schema.opciones_registro_actividades.url_imagen,
+      opcion_descripcion: schema.opciones_registro_actividades.descripcion,
+    })
+    .from(schema.registro_actividades_usuarios)
+    .leftJoin(
+      schema.opciones_registro_actividades,
+      eq(
+        schema.registro_actividades_usuarios.opcion_id,
+        schema.opciones_registro_actividades.id
+      )
+    )
+    .where(
+      and(
+        eq(schema.registro_actividades_usuarios.usuario_id, estudianteId),
+        isNull(schema.registro_actividades_usuarios.deleted_at)
+      )
+    )
+    .orderBy(desc(schema.registro_actividades_usuarios.vencimiento));
+
+  return actividadesRaw.map((a) => ({
+    id: a.id,
+    fecha: a.fecha,
+    vencimiento: a.vencimiento,
+    vencida: a.vencimiento < ahora,
+    observaciones: a.observaciones,
+    opcion: a.opcion_id
+      ? {
+          id: a.opcion_id,
+          nombre: a.opcion_nombre ?? '',
+          url_imagen: a.opcion_url_imagen ?? '',
+          descripcion: a.opcion_descripcion ?? null,
+        }
+      : null,
+  }));
 };
