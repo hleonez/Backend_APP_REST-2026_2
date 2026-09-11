@@ -36,6 +36,7 @@ export const usuarios = pgTable('usuarios', {
   fecha_registro: timestamp('fecha_registro').defaultNow().notNull(),
 
   is_active: boolean('is_active').default(true).notNull(),
+  onboarding_completado: boolean('onboarding_completado').default(false).notNull(),
 
   created_at: timestamp('created_at').defaultNow().notNull(),
   updated_at: timestamp('updated_at').defaultNow().notNull(),
