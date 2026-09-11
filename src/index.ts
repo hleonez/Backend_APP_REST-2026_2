@@ -34,6 +34,8 @@ import dashboardRoutes from './routes/dashboard.routes';
 import settingsRoutes from './routes/settings.routes';
 import premiosRoutes from './routes/premios.routes';
 import onboardingRoutes from './routes/onboarding.routes';
+import psicologosRoutes from './routes/psicologos.routes' ;
+import asignacionesRoutes from './routes/asignaciones.routes';
 
 const app = express();
 const server = http.createServer(app);
@@ -93,6 +95,8 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/premios', premiosRoutes);
 app.use('/api/onboarding', onboardingRoutes);
+app.use('/api/psicologos', psicologosRoutes);
+app.use('/api/asignaciones', asignacionesRoutes);
 
 // ============================================================
 // Swagger
