@@ -7,6 +7,8 @@ import {
   getResumenEstudianteService,
   getEvaluacionesEstudianteService,
   getActividadesEstudianteService,
+  getEstadisticasRegistroEmocionalEstudianteService,
+  abrirChatPsicologoService,
 } from '../services/panel-psicologo.service';
 
 const estudianteIdSchema = z.object({
@@ -155,6 +157,103 @@ export const getActividadesEstudiante = async (
     res.status(200).json(APISuccessResponse(actividades, 'Historial de actividades obtenido'));
   } catch (error) {
     console.error('[panel-psicologo] getActividadesEstudiante:', error);
+
+    const code = error instanceof Error ? (error as any).code : undefined;
+    if (code === 'ESTUDIANTE_NO_ENCONTRADO') {
+      res.status(404).json(APIErrorResponse((error as Error).message));
+      return;
+    }
+
+    res.status(500).json(APIErrorResponse('Error en el servidor'));
+  }
+};
+
+// ============================================================
+// GET /api/psicologo/pacientes/:estudianteId/registro-emocional/estadisticas
+// ============================================================
+
+/**
+ * Retorna las estadísticas agregadas de registro emocional del paciente
+ * (promedio general, valor mínimo/máximo, total registros, emociones más frecuentes,
+ * registros por semana).
+ *
+ * Seguridad (cadena aplicada en la ruta):
+ *   authenticate → isPsicologo → esPsicologoDeEstudiante
+ */
+export const getEstadisticasRegistroEmocional = async (
+  req: AuthRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const parsed = estudianteIdSchema.safeParse(req.params);
+    if (!parsed.success) {
+      res.status(400).json(APIErrorResponse('ID de estudiante inválido'));
+      return;
+    }
+
+    const estadisticas = await getEstadisticasRegistroEmocionalEstudianteService(
+      parsed.data.estudianteId
+    );
+    res
+      .status(200)
+      .json(
+        APISuccessResponse(
+          estadisticas,
+          'Estadísticas de registro emocional obtenidas correctamente'
+        )
+      );
+  } catch (error) {
+    console.error('[panel-psicologo] getEstadisticasRegistroEmocional:', error);
+
+    const code = error instanceof Error ? (error as any).code : undefined;
+    if (code === 'ESTUDIANTE_NO_ENCONTRADO') {
+      res.status(404).json(APIErrorResponse((error as Error).message));
+      return;
+    }
+
+    res.status(500).json(APIErrorResponse('Error en el servidor'));
+  }
+};
+
+// ============================================================
+// POST /api/psicologo/pacientes/:estudianteId/chat
+// ============================================================
+
+/**
+ * Abre una nueva sesión de chat o reactiva la sesión existente entre el
+ * psicólogo autenticado y el estudiante asignado.
+ *
+ * Seguridad (cadena aplicada en la ruta):
+ *   authenticate → isPsicologo → esPsicologoDeEstudiante
+ */
+export const abrirChat = async (
+  req: AuthRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const psicologoId = req.user?.id;
+    if (!psicologoId) {
+      res.status(401).json(APIErrorResponse('Usuario no autenticado'));
+      return;
+    }
+
+    const parsed = estudianteIdSchema.safeParse(req.params);
+    if (!parsed.success) {
+      res.status(400).json(APIErrorResponse('ID de estudiante inválido'));
+      return;
+    }
+
+    const resultado = await abrirChatPsicologoService(
+      psicologoId,
+      parsed.data.estudianteId
+    );
+
+    const statusCode = resultado.reabierto ? 200 : 201;
+    res
+      .status(statusCode)
+      .json(APISuccessResponse(resultado.chat, resultado.mensaje));
+  } catch (error) {
+    console.error('[panel-psicologo] abrirChat:', error);
 
     const code = error instanceof Error ? (error as any).code : undefined;
     if (code === 'ESTUDIANTE_NO_ENCONTRADO') {

@@ -1,6 +1,7 @@
 import { and, desc, eq, gt, inArray, isNull } from 'drizzle-orm';
 import { db } from '../db';
 import * as schema from '../db/schema';
+import { getEstadisticasService } from './estadisticas-registro-emocional.service';
 
 // ============================================================
 // Tipos de respuesta
@@ -374,4 +375,103 @@ export const getActividadesEstudianteService = async (
         }
       : null,
   }));
+};
+
+// ============================================================
+// Servicio: Estadísticas de registro emocional (Fase 7)
+// ============================================================
+
+/**
+ * Retorna las estadísticas agregadas de registro emocional del estudiante
+ * (promedio general, valor mínimo/máximo, total registros, emociones más frecuentes,
+ * registros por semana), reutilizando el servicio especializado.
+ *
+ * @throws Error con code 'ESTUDIANTE_NO_ENCONTRADO' si el estudiante no existe.
+ */
+export const getEstadisticasRegistroEmocionalEstudianteService = async (
+  estudianteId: number
+) => {
+  // Validar existencia del estudiante
+  await getPerfilEstudianteService(estudianteId);
+
+  return await getEstadisticasService(estudianteId);
+};
+
+// ============================================================
+// Servicio: Apertura / Reanudación de Chat (Fase 7)
+// ============================================================
+
+export interface AbrirChatResultado {
+  chat: typeof schema.chats.$inferSelect;
+  reabierto: boolean;
+  mensaje: string;
+}
+
+/**
+ * Abre una nueva sesión de chat o recupera la sesión activa existente
+ * entre el psicólogo autenticado y el estudiante.
+ *
+ * Precondición: la asignación activa ya fue validada por el middleware esPsicologoDeEstudiante.
+ *
+ * @throws Error con code 'ESTUDIANTE_NO_ENCONTRADO' si el estudiante no existe.
+ */
+export const abrirChatPsicologoService = async (
+  psicologoId: number,
+  estudianteId: number
+): Promise<AbrirChatResultado> => {
+  // Validar existencia del estudiante
+  await getPerfilEstudianteService(estudianteId);
+
+  // Buscar si ya existe un chat activo entre ambos (no IA, no eliminado)
+  const [chatActivo] = await db
+    .select()
+    .from(schema.chats)
+    .where(
+      and(
+        eq(schema.chats.psicologo_id, psicologoId),
+        eq(schema.chats.estudiante_id, estudianteId),
+        eq(schema.chats.is_active, true),
+        eq(schema.chats.isSendByAi, false),
+        isNull(schema.chats.deleted_at)
+      )
+    )
+    .orderBy(desc(schema.chats.ultima_actividad))
+    .limit(1);
+
+  if (chatActivo) {
+    // Actualizar timestamp de última actividad
+    const [chatActualizado] = await db
+      .update(schema.chats)
+      .set({
+        ultima_actividad: new Date(),
+        updated_at: new Date(),
+      })
+      .where(eq(schema.chats.id, chatActivo.id))
+      .returning();
+
+    return {
+      chat: chatActualizado ?? chatActivo,
+      reabierto: true,
+      mensaje: 'Chat activo recuperado exitosamente',
+    };
+  }
+
+  // Si no existe chat activo, crear uno nuevo
+  const [nuevoChat] = await db
+    .insert(schema.chats)
+    .values({
+      estudiante_id: estudianteId,
+      psicologo_id: psicologoId,
+      iniciado_en: new Date(),
+      ultima_actividad: new Date(),
+      isSendByAi: false,
+      is_active: true,
+    })
+    .returning();
+
+  return {
+    chat: nuevoChat,
+    reabierto: false,
+    mensaje: 'Chat iniciado exitosamente',
+  };
 };
