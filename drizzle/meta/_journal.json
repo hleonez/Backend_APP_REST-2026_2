@@ -33,15 +33,22 @@
     {
       "idx": 4,
       "version": "5",
-      "when": 1788543172778,
-      "tag": "0004_strong_iron_monger",
+      "when": 1776200000000,
+      "tag": "0004_asignaciones",
       "breakpoints": true
     },
     {
       "idx": 5,
       "version": "5",
-      "when": 1788909271405,
-      "tag": "0005_silly_mandarin",
+      "when": 1776400000000,
+      "tag": "0005_semaforo_dimensiones",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1776600000000,
+      "tag": "0006_onboarding_usuario",
       "breakpoints": true
     }
   ]

@@ -53,4 +53,4 @@ router.patch('/:id/rechazar', authenticate, isPsicologo, rechazarSolicitud);
  */
 router.delete('/:id', authenticate, finalizarAsignacion);
 
-export default router;
+export default router;

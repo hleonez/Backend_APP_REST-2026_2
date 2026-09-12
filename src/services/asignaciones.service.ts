@@ -314,6 +314,7 @@ export const eliminarAsignacionService = async (asignacionId: number, usuarioId:
 };
 
 /**
+
  * Estudiantes actualmente activos (asignación 'aprobado') a cargo del psicólogo autenticado.
  */
 export const getMisPacientesService = async (psicologoId: number) => {
