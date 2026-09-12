@@ -16,14 +16,40 @@ import {
 const router = Router();
 
 // Cadena de seguridad compartida por todas las rutas del panel:
-//   1. authenticate          — JWT válido y usuario activo
+//   1. authenticate          — JWT valido y usuario activo
 //   2. isPsicologo           — rol == 'psicologo'
-//   3. esPsicologoDeEstudiante — asignación aprobada activa con ese estudiante
+//   3. esPsicologoDeEstudiante — asignacion aprobada activa con ese estudiante
 
 /**
- * @route   GET /api/psicologo/pacientes/:estudianteId/perfil
- * @desc    Datos generales del estudiante (sin correo, contraseña ni teléfono)
- * @access  Psicólogo con asignación activa
+ * @swagger
+ * tags:
+ *   name: PanelPsicologo
+ *   description: >
+ *     Panel de seguimiento del psicologo sobre sus pacientes. Todas las rutas exigen
+ *     autenticacion, rol "psicologo", y una asignacion en estado "aprobado" (no eliminada)
+ *     con el estudiante solicitado. Si no existe esa asignacion, responde 403 Forbidden.
+ */
+
+/**
+ * @swagger
+ * /api/psicologo/pacientes/{estudianteId}/perfil:
+ *   get:
+ *     summary: Datos generales del estudiante asignado
+ *     description: No incluye correo, contrasena ni telefono.
+ *     tags: [PanelPsicologo]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: estudianteId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Perfil del estudiante
+ *       403:
+ *         description: El psicologo no tiene una asignacion aprobada con este estudiante
  */
 router.get(
   '/pacientes/:estudianteId/perfil',
@@ -34,9 +60,25 @@ router.get(
 );
 
 /**
- * @route   GET /api/psicologo/pacientes/:estudianteId/resumen
- * @desc    Ficha consolidada: perfil + última evaluación (semáforo/dimensiones) + actividades vigentes
- * @access  Psicólogo con asignación activa
+ * @swagger
+ * /api/psicologo/pacientes/{estudianteId}/resumen:
+ *   get:
+ *     summary: Ficha consolidada del estudiante
+ *     description: Perfil + ultima evaluacion (semaforo/dimensiones) + actividades vigentes.
+ *     tags: [PanelPsicologo]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: estudianteId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Ficha consolidada del estudiante
+ *       403:
+ *         description: El psicologo no tiene una asignacion aprobada con este estudiante
  */
 router.get(
   '/pacientes/:estudianteId/resumen',
@@ -47,9 +89,25 @@ router.get(
 );
 
 /**
- * @route   GET /api/psicologo/pacientes/:estudianteId/evaluaciones
- * @desc    Historial completo de evaluaciones (semáforos y puntajes), con dimensiones
- * @access  Psicólogo con asignación activa
+ * @swagger
+ * /api/psicologo/pacientes/{estudianteId}/evaluaciones:
+ *   get:
+ *     summary: Historial de evaluaciones del estudiante
+ *     description: Semaforos y puntajes historicos, con dimensiones.
+ *     tags: [PanelPsicologo]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: estudianteId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Historial de evaluaciones
+ *       403:
+ *         description: El psicologo no tiene una asignacion aprobada con este estudiante
  */
 router.get(
   '/pacientes/:estudianteId/evaluaciones',
@@ -60,9 +118,25 @@ router.get(
 );
 
 /**
- * @route   GET /api/psicologo/pacientes/:estudianteId/actividades
- * @desc    Historial completo de actividades y sus vencimientos (vigentes y vencidas)
- * @access  Psicólogo con asignación activa
+ * @swagger
+ * /api/psicologo/pacientes/{estudianteId}/actividades:
+ *   get:
+ *     summary: Historial de actividades del estudiante
+ *     description: Actividades y sus vencimientos (vigentes y vencidas).
+ *     tags: [PanelPsicologo]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: estudianteId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Historial de actividades
+ *       403:
+ *         description: El psicologo no tiene una asignacion aprobada con este estudiante
  */
 router.get(
   '/pacientes/:estudianteId/actividades',
@@ -73,9 +147,25 @@ router.get(
 );
 
 /**
- * @route   GET /api/psicologo/pacientes/:estudianteId/registro-emocional/estadisticas
- * @desc    Estadísticas de registro emocional del estudiante (promedio, mín, máx, frecuencias)
- * @access  Psicólogo con asignación activa
+ * @swagger
+ * /api/psicologo/pacientes/{estudianteId}/registro-emocional/estadisticas:
+ *   get:
+ *     summary: Estadisticas de registro emocional del estudiante
+ *     description: Promedio, minimo, maximo y frecuencias del registro emocional.
+ *     tags: [PanelPsicologo]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: estudianteId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Estadisticas de registro emocional
+ *       403:
+ *         description: El psicologo no tiene una asignacion aprobada con este estudiante
  */
 router.get(
   '/pacientes/:estudianteId/registro-emocional/estadisticas',
@@ -86,9 +176,24 @@ router.get(
 );
 
 /**
- * @route   POST /api/psicologo/pacientes/:estudianteId/chat
- * @desc    Apertura o reanudación de chat entre el psicólogo autenticado y el estudiante
- * @access  Psicólogo con asignación activa
+ * @swagger
+ * /api/psicologo/pacientes/{estudianteId}/chat:
+ *   post:
+ *     summary: Abrir o reanudar chat con el estudiante
+ *     tags: [PanelPsicologo]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: estudianteId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Chat abierto o reanudado
+ *       403:
+ *         description: El psicologo no tiene una asignacion aprobada con este estudiante
  */
 router.post(
   '/pacientes/:estudianteId/chat',
@@ -99,9 +204,25 @@ router.post(
 );
 
 /**
- * @route   GET /api/psicologo/pacientes/:estudianteId/registro-emocional
- * @desc    Historial de registro emocional, ordenado cronológicamente
- * @access  Psicólogo con asignación activa
+ * @swagger
+ * /api/psicologo/pacientes/{estudianteId}/registro-emocional:
+ *   get:
+ *     summary: Historial de registro emocional del estudiante
+ *     description: Ordenado cronologicamente.
+ *     tags: [PanelPsicologo]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: estudianteId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Historial de registro emocional
+ *       403:
+ *         description: El psicologo no tiene una asignacion aprobada con este estudiante
  */
 router.get(
   '/pacientes/:estudianteId/registro-emocional',
@@ -112,9 +233,24 @@ router.get(
 );
 
 /**
- * @route   GET /api/psicologo/pacientes/:estudianteId/encuestas
- * @desc    Respuestas a encuestas institucionales
- * @access  Psicólogo con asignación activa
+ * @swagger
+ * /api/psicologo/pacientes/{estudianteId}/encuestas:
+ *   get:
+ *     summary: Respuestas a encuestas institucionales del estudiante
+ *     tags: [PanelPsicologo]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: estudianteId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Respuestas a encuestas
+ *       403:
+ *         description: El psicologo no tiene una asignacion aprobada con este estudiante
  */
 router.get(
   '/pacientes/:estudianteId/encuestas',
@@ -125,9 +261,25 @@ router.get(
 );
 
 /**
- * @route   GET /api/psicologo/pacientes/:estudianteId/chats
- * @desc    Historial de conversaciones (solo las del psicólogo autenticado)
- * @access  Psicólogo con asignación activa
+ * @swagger
+ * /api/psicologo/pacientes/{estudianteId}/chats:
+ *   get:
+ *     summary: Historial de conversaciones con el estudiante
+ *     description: Solo las conversaciones del psicologo autenticado.
+ *     tags: [PanelPsicologo]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: estudianteId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Historial de conversaciones
+ *       403:
+ *         description: El psicologo no tiene una asignacion aprobada con este estudiante
  */
 router.get(
   '/pacientes/:estudianteId/chats',
