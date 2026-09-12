@@ -9,6 +9,9 @@ import {
   getActividadesEstudianteService,
   getEstadisticasRegistroEmocionalEstudianteService,
   abrirChatPsicologoService,
+  getRegistroEmocionalEstudianteService,
+  getEncuestasEstudianteService,
+  getChatsEstudianteService,
 } from '../services/panel-psicologo.service';
 
 const estudianteIdSchema = z.object({
@@ -254,6 +257,130 @@ export const abrirChat = async (
       .json(APISuccessResponse(resultado.chat, resultado.mensaje));
   } catch (error) {
     console.error('[panel-psicologo] abrirChat:', error);
+
+    const code = error instanceof Error ? (error as any).code : undefined;
+    if (code === 'ESTUDIANTE_NO_ENCONTRADO') {
+      res.status(404).json(APIErrorResponse((error as Error).message));
+      return;
+    }
+
+    res.status(500).json(APIErrorResponse('Error en el servidor'));
+  }
+};
+
+// ============================================================
+// GET /api/psicologo/pacientes/:estudianteId/registro-emocional
+// (Javier - Fase 7)
+// ============================================================
+
+/**
+ * Retorna el historial de registro emocional del estudiante, ordenado
+ * cronológicamente (más antiguo primero).
+ *
+ * Seguridad (cadena aplicada en la ruta):
+ *   authenticate → isPsicologo → esPsicologoDeEstudiante
+ */
+export const getRegistroEmocionalEstudiante = async (
+  req: AuthRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const parsed = estudianteIdSchema.safeParse(req.params);
+    if (!parsed.success) {
+      res.status(400).json(APIErrorResponse('ID de estudiante inválido'));
+      return;
+    }
+
+    const registros = await getRegistroEmocionalEstudianteService(parsed.data.estudianteId);
+    res.status(200).json(APISuccessResponse(registros, 'Registro emocional obtenido'));
+  } catch (error) {
+    console.error('[panel-psicologo] getRegistroEmocionalEstudiante:', error);
+
+    const code = error instanceof Error ? (error as any).code : undefined;
+    if (code === 'ESTUDIANTE_NO_ENCONTRADO') {
+      res.status(404).json(APIErrorResponse((error as Error).message));
+      return;
+    }
+
+    res.status(500).json(APIErrorResponse('Error en el servidor'));
+  }
+};
+
+// ============================================================
+// GET /api/psicologo/pacientes/:estudianteId/encuestas
+// (Javier - Fase 7)
+// ============================================================
+
+/**
+ * Retorna las respuestas del estudiante a encuestas institucionales,
+ * de más reciente a más antigua.
+ *
+ * Seguridad (cadena aplicada en la ruta):
+ *   authenticate → isPsicologo → esPsicologoDeEstudiante
+ */
+export const getEncuestasEstudiante = async (
+  req: AuthRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const parsed = estudianteIdSchema.safeParse(req.params);
+    if (!parsed.success) {
+      res.status(400).json(APIErrorResponse('ID de estudiante inválido'));
+      return;
+    }
+
+    const respuestas = await getEncuestasEstudianteService(parsed.data.estudianteId);
+    res.status(200).json(APISuccessResponse(respuestas, 'Respuestas de encuestas obtenidas'));
+  } catch (error) {
+    console.error('[panel-psicologo] getEncuestasEstudiante:', error);
+
+    const code = error instanceof Error ? (error as any).code : undefined;
+    if (code === 'ESTUDIANTE_NO_ENCONTRADO') {
+      res.status(404).json(APIErrorResponse((error as Error).message));
+      return;
+    }
+
+    res.status(500).json(APIErrorResponse('Error en el servidor'));
+  }
+};
+
+// ============================================================
+// GET /api/psicologo/pacientes/:estudianteId/chats
+// (Javier - Fase 7)
+// ============================================================
+
+/**
+ * Retorna el historial de conversaciones (chats) entre el psicólogo
+ * autenticado y el estudiante indicado, cada una con sus mensajes en
+ * orden cronológico.
+ *
+ * Seguridad (cadena aplicada en la ruta):
+ *   authenticate → isPsicologo → esPsicologoDeEstudiante
+ *
+ * Además, el service filtra explícitamente por psicologo_id = req.user.id,
+ * para que un psicólogo nunca vea chats de ese estudiante con otro psicólogo.
+ */
+export const getChatsEstudiante = async (
+  req: AuthRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const psicologoId = req.user?.id;
+    if (!psicologoId) {
+      res.status(401).json(APIErrorResponse('Usuario no autenticado'));
+      return;
+    }
+
+    const parsed = estudianteIdSchema.safeParse(req.params);
+    if (!parsed.success) {
+      res.status(400).json(APIErrorResponse('ID de estudiante inválido'));
+      return;
+    }
+
+    const chats = await getChatsEstudianteService(parsed.data.estudianteId, psicologoId);
+    res.status(200).json(APISuccessResponse(chats, 'Historial de conversaciones obtenido'));
+  } catch (error) {
+    console.error('[panel-psicologo] getChatsEstudiante:', error);
 
     const code = error instanceof Error ? (error as any).code : undefined;
     if (code === 'ESTUDIANTE_NO_ENCONTRADO') {

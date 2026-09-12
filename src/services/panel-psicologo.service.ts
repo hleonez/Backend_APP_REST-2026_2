@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, inArray, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, isNull } from 'drizzle-orm';
 import { db } from '../db';
 import * as schema from '../db/schema';
 import { getEstadisticasService } from './estadisticas-registro-emocional.service';
@@ -474,4 +474,246 @@ export const abrirChatPsicologoService = async (
     reabierto: false,
     mensaje: 'Chat iniciado exitosamente',
   };
+};
+
+// ============================================================
+// Tipos: registro emocional / encuestas / chats (Javier - Fase 7)
+// ============================================================
+
+export interface RegistroEmocionalHistorial {
+  id: number;
+  fecha: Date;
+  fecha_dia: string;
+  puntaje: number;
+  observaciones: string | null;
+  pregunta: {
+    id: number;
+    texto: string;
+    categoria: string;
+  } | null;
+  opcion: {
+    id: number;
+    nombre: string;
+    url_imagen: string;
+  } | null;
+}
+
+export interface EncuestaRespuestaHistorial {
+  id: number;
+  fecha: Date;
+  respuesta: string | null;
+  encuesta: {
+    id: number;
+    codigo: string;
+    titulo: string;
+  } | null;
+}
+
+export interface MensajeChatHistorial {
+  id: number;
+  usuario_id: number | null;
+  mensaje: string;
+  sentimiento: string | null;
+  enviado_en: Date;
+}
+
+export interface ChatHistorial {
+  id: number;
+  iniciado_en: Date;
+  ultima_actividad: Date;
+  finalizado_en: Date | null;
+  is_active: boolean;
+  mensajes: MensajeChatHistorial[];
+}
+
+// ============================================================
+// Servicio: Historial de registro emocional
+// ============================================================
+
+/**
+ * Retorna el historial de registro emocional del estudiante, ordenado
+ * cronológicamente (de más antiguo a más reciente), con la pregunta y la
+ * opción elegida en cada registro.
+ *
+ * @throws Error con code 'ESTUDIANTE_NO_ENCONTRADO' si el estudiante no existe.
+ */
+export const getRegistroEmocionalEstudianteService = async (
+  estudianteId: number
+): Promise<RegistroEmocionalHistorial[]> => {
+  await getPerfilEstudianteService(estudianteId);
+
+  const registrosRaw = await db
+    .select({
+      id: schema.registro_emocional.id,
+      fecha: schema.registro_emocional.fecha,
+      fecha_dia: schema.registro_emocional.fecha_dia,
+      puntaje: schema.registro_emocional.puntaje,
+      observaciones: schema.registro_emocional.observaciones,
+      pregunta_id: schema.preguntas_registro_emocional.id,
+      pregunta_texto: schema.preguntas_registro_emocional.texto,
+      pregunta_categoria: schema.preguntas_registro_emocional.categoria,
+      opcion_id: schema.opciones_registro_emocional.id,
+      opcion_nombre: schema.opciones_registro_emocional.nombre,
+      opcion_url_imagen: schema.opciones_registro_emocional.url_imagen,
+    })
+    .from(schema.registro_emocional)
+    .leftJoin(
+      schema.preguntas_registro_emocional,
+      eq(schema.registro_emocional.pregunta_id, schema.preguntas_registro_emocional.id)
+    )
+    .leftJoin(
+      schema.opciones_registro_emocional,
+      eq(schema.registro_emocional.opcion_id, schema.opciones_registro_emocional.id)
+    )
+    .where(
+      and(
+        eq(schema.registro_emocional.usuario_id, estudianteId),
+        isNull(schema.registro_emocional.deleted_at)
+      )
+    )
+    .orderBy(asc(schema.registro_emocional.fecha));
+
+  return registrosRaw.map((r) => ({
+    id: r.id,
+    fecha: r.fecha,
+    fecha_dia: r.fecha_dia,
+    puntaje: r.puntaje,
+    observaciones: r.observaciones,
+    pregunta: r.pregunta_id
+      ? { id: r.pregunta_id, texto: r.pregunta_texto ?? '', categoria: r.pregunta_categoria ?? 'general' }
+      : null,
+    opcion: r.opcion_id
+      ? { id: r.opcion_id, nombre: r.opcion_nombre ?? '', url_imagen: r.opcion_url_imagen ?? '' }
+      : null,
+  }));
+};
+
+// ============================================================
+// Servicio: Respuestas a encuestas institucionales
+// ============================================================
+
+/**
+ * Retorna las respuestas del estudiante a encuestas institucionales,
+ * de más reciente a más antigua.
+ *
+ * @throws Error con code 'ESTUDIANTE_NO_ENCONTRADO' si el estudiante no existe.
+ */
+export const getEncuestasEstudianteService = async (
+  estudianteId: number
+): Promise<EncuestaRespuestaHistorial[]> => {
+  await getPerfilEstudianteService(estudianteId);
+
+  const respuestasRaw = await db
+    .select({
+      id: schema.encuestasRespuestas.id,
+      fecha: schema.encuestasRespuestas.fecha,
+      respuesta: schema.encuestasRespuestas.respuesta,
+      encuesta_id: schema.encuestas.id,
+      encuesta_codigo: schema.encuestas.codigo,
+      encuesta_titulo: schema.encuestas.titulo,
+    })
+    .from(schema.encuestasRespuestas)
+    .leftJoin(
+      schema.encuestas,
+      eq(schema.encuestasRespuestas.encuesta_id, schema.encuestas.id)
+    )
+    .where(
+      and(
+        eq(schema.encuestasRespuestas.usuario_id, estudianteId),
+        isNull(schema.encuestasRespuestas.deleted_at)
+      )
+    )
+    .orderBy(desc(schema.encuestasRespuestas.fecha));
+
+  return respuestasRaw.map((r) => ({
+    id: r.id,
+    fecha: r.fecha,
+    respuesta: r.respuesta,
+    encuesta: r.encuesta_id
+      ? { id: r.encuesta_id, codigo: r.encuesta_codigo ?? '', titulo: r.encuesta_titulo ?? '' }
+      : null,
+  }));
+};
+
+// ============================================================
+// Servicio: Historial de conversaciones (chats)
+// ============================================================
+
+/**
+ * Retorna el historial de chats entre el PSICÓLOGO AUTENTICADO y el
+ * estudiante indicado, cada uno con sus mensajes en orden cronológico.
+ *
+ * Seguridad: se filtra explícitamente por `psicologo_id = psicologoId`
+ * además de `estudiante_id`, para que un psicólogo nunca pueda ver
+ * conversaciones de ese mismo estudiante con OTRO psicólogo, aunque
+ * tenga una asignación activa vigente.
+ *
+ * @throws Error con code 'ESTUDIANTE_NO_ENCONTRADO' si el estudiante no existe.
+ */
+export const getChatsEstudianteService = async (
+  estudianteId: number,
+  psicologoId: number
+): Promise<ChatHistorial[]> => {
+  await getPerfilEstudianteService(estudianteId);
+
+  const chatsRaw = await db
+    .select({
+      id: schema.chats.id,
+      iniciado_en: schema.chats.iniciado_en,
+      ultima_actividad: schema.chats.ultima_actividad,
+      finalizado_en: schema.chats.finalizado_en,
+      is_active: schema.chats.is_active,
+    })
+    .from(schema.chats)
+    .where(
+      and(
+        eq(schema.chats.estudiante_id, estudianteId),
+        eq(schema.chats.psicologo_id, psicologoId),
+        isNull(schema.chats.deleted_at)
+      )
+    )
+    .orderBy(desc(schema.chats.iniciado_en));
+
+  if (chatsRaw.length === 0) {
+    return [];
+  }
+
+  const chatIds = chatsRaw.map((c) => c.id);
+
+  const mensajesRaw = await db
+    .select({
+      id: schema.mensajes_chat.id,
+      chat_id: schema.mensajes_chat.chat_id,
+      usuario_id: schema.mensajes_chat.usuario_id,
+      mensaje: schema.mensajes_chat.mensaje,
+      sentimiento: schema.mensajes_chat.sentimiento,
+      enviado_en: schema.mensajes_chat.enviado_en,
+    })
+    .from(schema.mensajes_chat)
+    .where(
+      and(
+        inArray(schema.mensajes_chat.chat_id, chatIds),
+        isNull(schema.mensajes_chat.deleted_at)
+      )
+    )
+    .orderBy(asc(schema.mensajes_chat.enviado_en));
+
+  const mensajesPorChat = new Map<number, MensajeChatHistorial[]>();
+  for (const m of mensajesRaw) {
+    if (m.chat_id === null) continue;
+    const lista = mensajesPorChat.get(m.chat_id) ?? [];
+    lista.push({
+      id: m.id,
+      usuario_id: m.usuario_id,
+      mensaje: m.mensaje,
+      sentimiento: m.sentimiento,
+      enviado_en: m.enviado_en,
+    });
+    mensajesPorChat.set(m.chat_id, lista);
+  }
+
+  return chatsRaw.map((c) => ({
+    ...c,
+    mensajes: mensajesPorChat.get(c.id) ?? [],
+  }));
 };

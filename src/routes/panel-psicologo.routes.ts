@@ -8,6 +8,9 @@ import {
   getActividadesEstudiante,
   getEstadisticasRegistroEmocional,
   abrirChat,
+  getRegistroEmocionalEstudiante,
+  getEncuestasEstudiante,
+  getChatsEstudiante,
 } from '../controllers/panel-psicologo.controller';
 
 const router = Router();
@@ -93,6 +96,45 @@ router.post(
   isPsicologo,
   esPsicologoDeEstudiante,
   abrirChat
+);
+
+/**
+ * @route   GET /api/psicologo/pacientes/:estudianteId/registro-emocional
+ * @desc    Historial de registro emocional, ordenado cronológicamente
+ * @access  Psicólogo con asignación activa
+ */
+router.get(
+  '/pacientes/:estudianteId/registro-emocional',
+  authenticate,
+  isPsicologo,
+  esPsicologoDeEstudiante,
+  getRegistroEmocionalEstudiante
+);
+
+/**
+ * @route   GET /api/psicologo/pacientes/:estudianteId/encuestas
+ * @desc    Respuestas a encuestas institucionales
+ * @access  Psicólogo con asignación activa
+ */
+router.get(
+  '/pacientes/:estudianteId/encuestas',
+  authenticate,
+  isPsicologo,
+  esPsicologoDeEstudiante,
+  getEncuestasEstudiante
+);
+
+/**
+ * @route   GET /api/psicologo/pacientes/:estudianteId/chats
+ * @desc    Historial de conversaciones (solo las del psicólogo autenticado)
+ * @access  Psicólogo con asignación activa
+ */
+router.get(
+  '/pacientes/:estudianteId/chats',
+  authenticate,
+  isPsicologo,
+  esPsicologoDeEstudiante,
+  getChatsEstudiante
 );
 
 export default router;
