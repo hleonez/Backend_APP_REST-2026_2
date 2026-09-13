@@ -2,7 +2,8 @@ import { Response } from 'express';
 import { z } from 'zod';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { APIErrorResponse, APISuccessResponse } from '../shared/utils/api.utils';
-import { crearSolicitudService, getMisSolicitudesService, getSolicitudesPsicologoService, aprobarSolicitudService, rechazarSolicitudService, getMisPacientesService } from '../services/asignaciones.service';
+import { crearSolicitudService, getMisSolicitudesService, getSolicitudesPsicologoService, aprobarSolicitudService, rechazarSolicitudService, getMisPacientesService, eliminarAsignacionService } from '../services/asignaciones.service';
+import { ROLES } from '../shared/const/roles.const';
 
 const solicitarSchema = z.object({
   psicologo_id: z.number().int().positive(),
@@ -161,6 +162,36 @@ export const misPacientes = async (req: AuthRequest, res: Response): Promise<voi
   } catch (error) {
     console.error('Error obteniendo pacientes activos:', error);
     res.status(500).json(APIErrorResponse('Error en el servidor'));
+  }
+};
+
+/**
+ * DELETE /api/asignaciones/:id
+ * Finaliza o cancela una asignación (estudiante o psicólogo)
+ */
+export const finalizarAsignacion = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const usuarioId = req.user?.id;
+    const roleName = req.user?.role;
+
+    if (!usuarioId || !roleName) {
+      res.status(401).json(APIErrorResponse('Usuario no autenticado'));
+      return;
+    }
+
+    const parsedParams = idParamSchema.safeParse(req.params);
+    if (!parsedParams.success) {
+      res.status(400).json(APIErrorResponse('ID inválido'));
+      return;
+    }
+
+    const isPsicologo = roleName === ROLES.PSICOLOGO.nombre;
+
+    const actualizada = await eliminarAsignacionService(parsedParams.data.id, usuarioId, isPsicologo);
+    res.status(200).json(APISuccessResponse(actualizada, 'Asignación finalizada correctamente'));
+  } catch (error) {
+    console.error('Error finalizando asignación:', error);
+    handleAsignacionError(error, res);
   }
 };
 

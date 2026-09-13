@@ -187,8 +187,17 @@ export const aprobarSolicitudService = async (asignacionId: number, psicologoId:
     const [actualizada] = await tx
       .update(schema.asignaciones)
       .set({ estado: ASIGNACION_ESTADO.APROBADO, procesado_en: new Date() })
-      .where(eq(schema.asignaciones.id, asignacionId))
+      .where(and(
+        eq(schema.asignaciones.id, asignacionId),
+        eq(schema.asignaciones.estado, ASIGNACION_ESTADO.PENDIENTE)
+      ))
       .returning();
+
+    if (!actualizada) {
+      const error = new Error('La solicitud fue procesada por otra transacción concurrentemente.');
+      (error as any).code = 'SOLICITUD_YA_PROCESADA';
+      throw error;
+    }
 
     return actualizada;
   });
@@ -228,13 +237,84 @@ export const rechazarSolicitudService = async (asignacionId: number, psicologoId
   const [actualizada] = await db
     .update(schema.asignaciones)
     .set({ estado: ASIGNACION_ESTADO.RECHAZADO, procesado_en: new Date() })
-    .where(eq(schema.asignaciones.id, asignacionId))
+    .where(and(
+      eq(schema.asignaciones.id, asignacionId),
+      eq(schema.asignaciones.estado, ASIGNACION_ESTADO.PENDIENTE)
+    ))
     .returning();
+
+  if (!actualizada) {
+    const error = new Error('La solicitud fue procesada por otra transacción concurrentemente.');
+    (error as any).code = 'SOLICITUD_YA_PROCESADA';
+    throw error;
+  }
 
   return actualizada;
 };
 
 /**
+ * Finaliza o cancela una asignación.
+ * Estudiantes pueden cancelar solicitudes pendientes o finalizar asignaciones aprobadas propias.
+ * Psicólogos pueden finalizar asignaciones aprobadas de sus pacientes o rechazar/cancelar solicitudes.
+ */
+export const eliminarAsignacionService = async (asignacionId: number, usuarioId: number, isPsicologo: boolean) => {
+  return db.transaction(async (tx) => {
+    const [asignacion] = await tx
+      .select()
+      .from(schema.asignaciones)
+      .where(and(
+        eq(schema.asignaciones.id, asignacionId),
+        isNull(schema.asignaciones.deleted_at)
+      ))
+      .limit(1);
+
+    if (!asignacion) {
+      const error = new Error('Asignación no encontrada.');
+      (error as any).code = 'SOLICITUD_NO_ENCONTRADA';
+      throw error;
+    }
+
+    if (isPsicologo) {
+      if (asignacion.psicologo_id !== usuarioId) {
+        const error = new Error('No autorizado para modificar esta asignación.');
+        (error as any).code = 'NO_AUTORIZADO';
+        throw error;
+      }
+    } else {
+      if (asignacion.estudiante_id !== usuarioId) {
+        const error = new Error('No autorizado para modificar esta asignación.');
+        (error as any).code = 'NO_AUTORIZADO';
+        throw error;
+      }
+    }
+
+    if (asignacion.estado === ASIGNACION_ESTADO.FINALIZADO || asignacion.estado === ASIGNACION_ESTADO.RECHAZADO) {
+      const error = new Error('La asignación ya se encuentra inactiva.');
+      (error as any).code = 'SOLICITUD_YA_PROCESADA';
+      throw error;
+    }
+
+    const [actualizada] = await tx
+      .update(schema.asignaciones)
+      .set({ estado: ASIGNACION_ESTADO.FINALIZADO, finalizado_en: new Date() })
+      .where(and(
+        eq(schema.asignaciones.id, asignacionId),
+        eq(schema.asignaciones.estado, asignacion.estado)
+      ))
+      .returning();
+
+    if (!actualizada) {
+      const error = new Error('La asignación fue modificada por otra transacción concurrentemente.');
+      (error as any).code = 'SOLICITUD_YA_PROCESADA';
+      throw error;
+    }
+
+    return actualizada;
+  });
+};
+
+/**
+
  * Estudiantes actualmente activos (asignación 'aprobado') a cargo del psicólogo autenticado.
  */
 export const getMisPacientesService = async (psicologoId: number) => {

@@ -6,38 +6,93 @@ import { asignarSemaforoUsuarioAutenticado } from '../controllers/asignacion-sem
 const router = Router();
 
 /**
- * @route GET /api/evaluaciones/preguntas
- * @desc Get all questions for evaluation
- * @access Public
+ * @swagger
+ * tags:
+ *   name: Evaluaciones
+ *   description: Evaluaciones de semaforo (puntajes y dimensiones) del estudiante
+ */
+
+/**
+ * @swagger
+ * /api/evaluaciones/preguntas:
+ *   get:
+ *     summary: Obtener el banco de preguntas de evaluacion
+ *     tags: [Evaluaciones]
+ *     security: []
+ *     responses:
+ *       200:
+ *         description: Lista de preguntas
  */
 router.get('/preguntas', evaluacionController.getPreguntas);
 
 /**
- * @route POST /api/evaluaciones
- * @desc Create a new evaluation
- * @access Private (Users only)
+ * @swagger
+ * /api/evaluaciones:
+ *   post:
+ *     summary: Crear una nueva evaluacion
+ *     tags: [Evaluaciones]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       201:
+ *         description: Evaluacion creada
+ *       403:
+ *         description: Requiere rol usuario
  */
 router.post('/', authenticate, isUsuario, evaluacionController.crearEvaluacion);
 
 /**
- * @route POST /api/evaluaciones/asignacion-semaforo
- * @desc Assign traffic-light status to current authenticated user
- * @access Private (Users only)
+ * @swagger
+ * /api/evaluaciones/asignacion-semaforo:
+ *   post:
+ *     summary: Asignar estado de semaforo al usuario autenticado
+ *     tags: [Evaluaciones]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Semaforo asignado
+ *       403:
+ *         description: Requiere rol usuario
  */
 router.post('/asignacion-semaforo', authenticate, isUsuario, asignarSemaforoUsuarioAutenticado);
 
 /**
- * @route GET /api/evaluaciones
- * @desc Get all evaluations for the authenticated user
- * @access Private (Users only)
+ * @swagger
+ * /api/evaluaciones:
+ *   get:
+ *     summary: Listar evaluaciones del usuario autenticado
+ *     tags: [Evaluaciones]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Lista de evaluaciones
+ *       403:
+ *         description: Requiere rol usuario
  */
 router.get('/', authenticate, isUsuario, evaluacionController.getEvaluaciones);
 
 /**
- * @route GET /api/evaluaciones/:id
- * @desc Get specific evaluation by ID
- * @access Private (Users only)
+ * @swagger
+ * /api/evaluaciones/{id}:
+ *   get:
+ *     summary: Obtener una evaluacion especifica por id
+ *     tags: [Evaluaciones]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Evaluacion encontrada
+ *       404:
+ *         description: Evaluacion no encontrada
  */
 router.get('/:id', authenticate, isUsuario, evaluacionController.getEvaluacion);
 
-export default router; 
+export default router;
