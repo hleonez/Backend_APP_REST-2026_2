@@ -102,15 +102,20 @@ Usuarios del sistema. Pueden ser estudiantes, psicólogos o administradores seg�
 | `fecha_nacimiento` | `date` | nullable | — |
 | `idioma` | `varchar(255)` | nullable | — |
 | `especialidad_psicologo` | `varchar(255)` | nullable (solo psicólogos) | — |
+| `streak_goal_days` | `integer` | NOT NULL | `7` |
+| `streak_count` | `integer` | NOT NULL | `0` |
+| `streak_last_date` | `date` | nullable | — |
+| `streak_goal_set` | `boolean` | NOT NULL | `false` |
 | `fecha_registro` | `timestamp` | NOT NULL | `now()` |
 | `is_active` | `boolean` | NOT NULL | `true` |
+| `onboarding_completado` | `boolean` | NOT NULL | `false` |
 | `created_at` | `timestamp` | NOT NULL | `now()` |
 | `updated_at` | `timestamp` | NOT NULL | `now()` |
 | `deleted_at` | `timestamp` | nullable | — |
 
 **Índices:** `idx_usuarios_id_rol` sobre `id_rol`
 
-**Relaciones:** N-1 con `roles` vía `id_rol`
+**Relaciones:** N-1 con `roles` vía `id_rol`, 1-N con `asignaciones` como estudiante (`asignacionesComoEstudiante`) y como psicólogo (`asignacionesComoPsicologo`)
 
 ---
 
@@ -480,12 +485,17 @@ Mensajes individuales dentro de un chat.
 | `chat_id` | `integer` | FK → `chats.id` | nullable |
 | `usuario_id` | `integer` | FK → `usuarios.id` | nullable |
 | `mensaje` | `text` | NOT NULL | — |
+| `sentimiento` | `varchar(10)` | nullable (`'NEG'`, `'NEU'`, `'POS'`) | — |
+| `confianza` | `numeric(5, 3)` | nullable | — |
+| `sentimiento_scores` | `jsonb` | nullable (`{ NEG, NEU, POS }`) | — |
 | `enviado_en` | `timestamp` | NOT NULL | `now()` |
 | `created_at` | `timestamp` | NOT NULL | `now()` |
 | `updated_at` | `timestamp` | NOT NULL | `now()` |
 | `deleted_at` | `timestamp` | nullable | — |
 
 **Índices:** `idx_mensajes_chat_chat_id`, `idx_mensajes_chat_usuario_id`
+
+**Análisis de Sentimiento (Robertuito):** `sentimiento`, `confianza` y `sentimiento_scores` son calculados para mensajes de estudiantes procesados por el pipeline de análisis de sentimientos (o fallback seguro). Nullable para compatibilidad con mensajes sin procesar o de agentes IA/psicólogos.
 
 ---
 
