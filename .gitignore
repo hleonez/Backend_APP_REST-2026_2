@@ -39,4 +39,5 @@ Thumbs.db
 # Postman local workspaces (carpetas auto-generadas con rutas muy largas)
 .postman/
 postman/
-
+#Graphify output
+.cursor/
