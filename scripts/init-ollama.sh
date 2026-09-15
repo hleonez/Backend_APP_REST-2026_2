@@ -3,7 +3,7 @@
 echo "Starting Ollama initialization..."
 
 ATTEMPT=0
-MAX_ATTEMPTS=24
+MAX_ATTEMPTS=36
 
 while [ $ATTEMPT -lt $MAX_ATTEMPTS ]
 do
@@ -19,11 +19,11 @@ done
 
 if [ $ATTEMPT -eq $MAX_ATTEMPTS ]
 then
-  echo "Ollama not available after 2 minutes"
+  echo "Ollama not available after 3 minutes"
   exit 1
 fi
 
-MODEL_NAME="qwen2.5:0.5b"
+MODEL_NAME="qwen3:8b"
 echo "Checking if model $MODEL_NAME is already downloaded..."
 
 MODELS=$(curl -s http://ollama:11434/api/tags 2>/dev/null || echo "")
