@@ -4,7 +4,7 @@ import { and, eq, desc, like, isNull, or } from 'drizzle-orm';
 import { db } from '../db';
 import * as schema from '../db/schema';
 import { AuthRequest } from '../middleware/auth.middleware';
-import { chatWithOllama } from '../services/ollama.service';
+import { chatWithOllama, type OllamaChatMessage } from '../services/ollama.service';
 import { APISuccessResponse, APIErrorResponse } from '../shared/utils/api.utils';
 import { analizarSentimiento, type SentimientoResultado } from '../services/sentimiento.service';
 import { elegirEstilo } from '../services/selector-estilo.service';
@@ -240,6 +240,30 @@ const getOrCreateIAChat = async (usuarioId: number): Promise<number> => {
     .returning({ id: schema.chats.id });
 
   return creado.id;
+};
+
+const MAX_TURNOS_HISTORIAL_IA = 8;
+
+const getRecentIAChatTurns = async (
+  chatId: number,
+  usuarioId: number,
+): Promise<OllamaChatMessage[]> => {
+  const recientes = await db
+    .select({
+      mensaje: schema.mensajes_chat.mensaje,
+      usuario_id: schema.mensajes_chat.usuario_id,
+    })
+    .from(schema.mensajes_chat)
+    .where(eq(schema.mensajes_chat.chat_id, chatId))
+    .orderBy(desc(schema.mensajes_chat.enviado_en))
+    .limit(MAX_TURNOS_HISTORIAL_IA * 2);
+
+  return recientes
+    .reverse()
+    .map((fila) => ({
+      role: fila.usuario_id === usuarioId ? 'user' as const : 'assistant' as const,
+      content: fila.mensaje,
+    }));
 };
 
 const guardarInteraccionIA = async (params: {
@@ -524,6 +548,9 @@ export const chatConIAUnificado = async (req: AuthRequest, res: Response): Promi
         `Sentimiento detectado en el ultimo mensaje: ${sentimiento.label} (confianza ${sentimiento.confianza.toFixed(2)}).`,
       ].join('\n\n');
 
+      const userId = req.user.id;
+      const historial = await getRecentIAChatTurns(chatIAId, userId);
+
       const respuestaIA = await Promise.race([
         chatWithOllama({
           mensaje,
@@ -531,9 +558,12 @@ export const chatConIAUnificado = async (req: AuthRequest, res: Response): Promi
           modo,
           numeroMensaje,
           estilo,
+          userId,
+          perfil: contextoBienestar.datos.perfil_emocional,
+          historial,
         }),
         new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout')), 70000)
+          setTimeout(() => reject(new Error('Timeout')), 120000)
         )
       ]) as any;
 

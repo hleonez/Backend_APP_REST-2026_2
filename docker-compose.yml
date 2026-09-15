@@ -10,7 +10,7 @@ services:
       - CORS_ORIGINS=${CORS_ORIGINS:?CORS_ORIGINS is required}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - OLLAMA_API_URL=http://ollama:11434
-      - OLLAMA_MODEL=qwen2:1.5b
+      - OLLAMA_MODEL=qwen3:8b
       - USE_OLLAMA=true
       - SENTIMENT_API_URL=${SENTIMENT_API_URL:-http://sentiment:8000}
       - PORT=3000
@@ -52,6 +52,9 @@ services:
     environment:
       - OLLAMA_HOST=0.0.0.0
       - OLLAMA_ORIGINS=*
+      - OLLAMA_NUM_THREAD=6
+      - OLLAMA_KEEP_ALIVE=30m
+      - OLLAMA_FLASH_ATTENTION=0
     restart: unless-stopped
     networks:
       - app-network
@@ -83,12 +86,12 @@ services:
     command: >
       sh -c "
       ATTEMPT=0;
-      while [ $$ATTEMPT -lt 24 ]; do 
+      while [ $$ATTEMPT -lt 36 ]; do 
         curl -f http://ollama:11434/api/tags >/dev/null 2>&1 && break;
         ATTEMPT=$$((ATTEMPT+1));
         sleep 5;
       done;
-      curl -s http://ollama:11434/api/tags | grep -q qwen2 || curl -X POST http://ollama:11434/api/pull -H 'Content-Type: application/json' -d '{\"name\":\"qwen2:1.5b\"}' --no-buffer;
+      curl -s http://ollama:11434/api/tags | grep -q 'qwen3:8b' || curl -X POST http://ollama:11434/api/pull -H 'Content-Type: application/json' -d '{\"name\":\"qwen3:8b\"}' --no-buffer;
       echo 'Ollama ready';
       "
     networks:

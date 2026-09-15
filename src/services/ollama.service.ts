@@ -1,5 +1,5 @@
 import { construirPromptDinamico, construirPromptFinal, generarRespuestaFallbackNatural, esRespuestaAceptable } from './prompts-enhanced.service';
-import { analizarPatronesEmocionales, construirResumenPerfil } from './user-profile.service';
+import { analizarPatronesEmocionales, type PerfilEmocional } from './user-profile.service';
 import type { EstiloRespuestaId } from '../shared/const/estilos-respuesta.const';
 import {
   agruparPuntajesPorDimension,
@@ -10,7 +10,15 @@ import {
 } from '../shared/utils/semaforo-dimensiones.utils';
 
 const OLLAMA_API_URL = process.env.OLLAMA_API_URL || 'http://localhost:11434';
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'qwen2:1.5b'; // Modelo balanceado para CPU
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'qwen3:8b';
+const OLLAMA_KEEP_ALIVE = process.env.OLLAMA_KEEP_ALIVE || '30m';
+const OLLAMA_NUM_CTX = Number(process.env.OLLAMA_NUM_CTX) || 4096;
+const OLLAMA_NUM_THREAD = Number(process.env.OLLAMA_NUM_THREAD) || 6;
+const OLLAMA_NUM_PREDICT = Number(process.env.OLLAMA_NUM_PREDICT) || 180;
+const OLLAMA_QUERY_TIMEOUT_MS = Number(process.env.OLLAMA_QUERY_TIMEOUT_MS) || 120000;
+const OLLAMA_PULL_TIMEOUT_MS = Number(process.env.OLLAMA_PULL_TIMEOUT_MS) || 1200000;
+
+export type OllamaChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
 
 interface OllamaResponse {
   model: string;
@@ -307,7 +315,7 @@ export const checkOllamaHealth = async (): Promise<boolean> => {
  */
 export const downloadModel = async (): Promise<boolean> => {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 120000); // 2 minutos de timeout
+  const timeout = setTimeout(() => controller.abort(), OLLAMA_PULL_TIMEOUT_MS);
   try {
     console.log(`Descargando modelo ${OLLAMA_MODEL}...`);
     const response = await fetch(`${OLLAMA_API_URL}/api/pull`, {
@@ -352,7 +360,7 @@ export const downloadModel = async (): Promise<boolean> => {
   } catch (error: any) {
     clearTimeout(timeout);
     if (error.name === 'AbortError') {
-      console.error('Timeout: la descarga del modelo tardó más de 2 minutos');
+      console.error('Timeout: la descarga del modelo tardó más de lo permitido');
     } else {
       console.error('Error descargando modelo:', error);
     }
@@ -363,17 +371,26 @@ export const downloadModel = async (): Promise<boolean> => {
 /**
  * Consulta a Ollama con timeout de 60 segundos
  */
-export const queryOllama = async (prompt: string, systemPrompt?: string): Promise<string> => {
+export const queryOllama = async (
+  prompt: string,
+  systemPrompt?: string,
+  historial: OllamaChatMessage[] = [],
+): Promise<string> => {
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 60000); // 60 segundos de timeout
+    const timeout = setTimeout(() => controller.abort(), OLLAMA_QUERY_TIMEOUT_MS);
 
-    const messages = [];
-    
+    const messages: OllamaChatMessage[] = [];
+
     if (systemPrompt) {
       messages.push({ role: 'system', content: systemPrompt });
     }
-    
+
+    for (const turno of historial) {
+      if (turno.role === 'system') continue;
+      messages.push({ role: turno.role, content: turno.content });
+    }
+
     messages.push({ role: 'user', content: prompt });
 
     const response = await fetch(`${OLLAMA_API_URL}/api/chat`, {
@@ -385,11 +402,16 @@ export const queryOllama = async (prompt: string, systemPrompt?: string): Promis
         model: OLLAMA_MODEL,
         messages,
         stream: false,
+        think: false,
+        keep_alive: OLLAMA_KEEP_ALIVE,
         options: {
           temperature: 0.7,
           top_p: 0.95,
           top_k: 50,
-        }
+          num_ctx: OLLAMA_NUM_CTX,
+          num_thread: OLLAMA_NUM_THREAD,
+          num_predict: OLLAMA_NUM_PREDICT,
+        },
       }),
       signal: controller.signal
     });
@@ -404,7 +426,7 @@ export const queryOllama = async (prompt: string, systemPrompt?: string): Promis
     return data.message?.content || 'No se pudo generar respuesta';
   } catch (error: any) {
     if (error.name === 'AbortError') {
-      console.error('Timeout: Ollama tardó más de 60 segundos en responder');
+      console.error(`Timeout: Ollama tardó más de ${OLLAMA_QUERY_TIMEOUT_MS / 1000} segundos en responder`);
       throw new Error('Ollama no responde. Por favor, intenta nuevamente.');
     }
     console.error('Error consultando Ollama:', error);
@@ -626,9 +648,6 @@ export const analizarRespuestasOllama = async (
 /**
  * Chat general con IA usando Ollama
  */
-/**
- * Chat general con IA usando Ollama
- */
 type ModoRespuesta = 'normal' | 'profundo';
 
 export const chatWithOllama = async (params: {
@@ -639,53 +658,64 @@ export const chatWithOllama = async (params: {
   numeroMensaje?: number;
   /**
    * Estilo de respuesta elegido por el selector determinista
-   * (`selector-estilo.service.ts`, Fase 3). Si no se provee (p. ej.
-   * `chatConIAAvanzado`, que aun no integra el selector), se usa
+   * (`selector-estilo.service.ts`, Fase 3). Si no se provee se usa
    * 'conversacion_neutral' como estilo por defecto seguro.
    */
   estilo?: EstiloRespuestaId;
+  /** Perfil ya cargado en el controlador; si llega, no se vuelve a consultar. */
+  perfil?: PerfilEmocional;
+  /** Últimos turnos del chat IA, sin el mensaje actual. */
+  historial?: OllamaChatMessage[];
 }): Promise<ChatResponse> => {
-  const { mensaje, contexto, modo, userId, numeroMensaje = 0, estilo = 'conversacion_neutral' } = params;
+  const {
+    mensaje,
+    contexto,
+    userId,
+    numeroMensaje = 0,
+    estilo = 'conversacion_neutral',
+    perfil: perfilParam,
+    historial = [],
+  } = params;
 
   try {
-    // Obtener perfil del usuario si disponible
-    let perfilContexto = undefined;
-    let resumenPerfil = '';
-    
-    if (userId) {
-      try {
-        const perfil = await analizarPatronesEmocionales(userId, 25);
-        resumenPerfil = await construirResumenPerfil(userId, perfil);
-        perfilContexto = {
-          emociones_frecuentes: perfil.emociones_frecuentes,
-          temas_recurrentes: perfil.temas_recurrentes,
-          patrones: perfil.patrones_comportamiento,
-          dias_sin_comunicacion: perfil.dias_sin_comunicacion,
-          tiene_historial: perfil.emociones_frecuentes.length > 0,
-        };
-      } catch (e) {
-        console.log('No se pudo cargar perfil del usuario:', e);
-      }
+    let perfilContexto: {
+      emociones_frecuentes?: string[];
+      temas_recurrentes?: string[];
+      patrones?: string[];
+      dias_sin_comunicacion?: number;
+      tiene_historial?: boolean;
+    } | undefined;
+
+    const perfilActivo = perfilParam ?? (userId
+      ? await analizarPatronesEmocionales(userId, 25).catch((e) => {
+          console.log('No se pudo cargar perfil del usuario:', e);
+          return undefined;
+        })
+      : undefined);
+
+    if (perfilActivo) {
+      perfilContexto = {
+        emociones_frecuentes: perfilActivo.emociones_frecuentes,
+        temas_recurrentes: perfilActivo.temas_recurrentes,
+        patrones: perfilActivo.patrones_comportamiento,
+        dias_sin_comunicacion: perfilActivo.dias_sin_comunicacion,
+        tiene_historial:
+          perfilActivo.emociones_frecuentes.length > 0 ||
+          perfilActivo.temas_recurrentes.length > 0,
+      };
     }
 
-    // Construir system prompt dinámico basado en perfil + estilo elegido
     const systemPrompt = construirPromptDinamico(perfilContexto, estilo);
-
-    // Construir prompts con variación
-    let userPrompt = mensaje;
-    let contextoDinamico = resumenPerfil;
-
-    if (contexto) {
-      contextoDinamico = `${resumenPerfil ? resumenPerfil + ' ' : ''}${contexto}`;
-    }
-
-    const promspts = construirPromptFinal(mensaje, systemPrompt, estilo, numeroMensaje, contextoDinamico);
+    const prompts = construirPromptFinal(mensaje, systemPrompt, estilo, numeroMensaje, contexto);
 
     if (process.env.NODE_ENV !== 'production') {
-      console.log(`[NOA DEBUG] Estilo=${estilo} (mensaje #${numeroMensaje})`);
+      const tienePersonalizacion = prompts.system.includes('PERSONALIZACIÓN PARA ESTE USUARIO');
+      console.log(
+        `[NOA DEBUG] Estilo=${estilo} (mensaje #${numeroMensaje}) userId=${userId ?? 'n/a'} personalizacion=${tienePersonalizacion} turnosHistorial=${historial.length}`,
+      );
     }
 
-    const respuestaCruda = await queryOllama(promspts.user, promspts.system);
+    const respuestaCruda = await queryOllama(prompts.user, prompts.system, historial);
     let respuesta = respuestaCruda.trim();
 
     if (!esRespuestaAceptable(respuesta, mensaje)) {
@@ -700,7 +730,6 @@ export const chatWithOllama = async (params: {
   } catch (error) {
     console.error('Error en chat con Ollama:', error);
 
-    // Fallback más natural
     const emocion = detectarEmocion(params.mensaje);
     return {
       respuesta: generarRespuestaFallbackNatural(emocion, params.mensaje),
