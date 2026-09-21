@@ -4,6 +4,181 @@ import { inArray, eq } from 'drizzle-orm';
 import bcrypt from 'bcrypt';
 import { DIMENSIONES_SEMAFORO, type DimensionSemaforo } from '../shared/utils/semaforo-dimensiones.utils';
 
+// Catálogo de preguntas de registro emocional (20 base + 21 de ampliación,
+// Fase 5/6). Se usa para poblar tanto `preguntas_registro_emocional` como el
+// banco de evaluaciones (`preguntas`): los TEXTO deben coincidir, porque la
+// encuesta diaria del frontend cruza ambas tablas por texto normalizado.
+const PREGUNTAS_REGISTRO_EMOCIONAL_SEED: { texto: string; categoria: DimensionSemaforo }[] = [
+  { texto: '¿Cómo describirías tu estado de ánimo general durante la última semana?', categoria: 'humor_depresivo' },
+  { texto: '¿Cómo te has sentido respecto al interés o motivación para hacer actividades?', categoria: 'energia_motivacion' },
+  { texto: '¿Cómo ha sido la calidad de tu sueño recientemente?', categoria: 'sueno' },
+  { texto: '¿Cómo describirías tu nivel de energía en el día a día?', categoria: 'energia_motivacion' },
+  { texto: '¿Cómo percibes tu apetito en los últimos días?', categoria: 'humor_depresivo' },
+  { texto: '¿Cómo te has sentido contigo mismo (autoestima, autovaloración)?', categoria: 'autoestima_autocuidado' },
+  { texto: '¿Cómo calificarías tu capacidad de concentración?', categoria: 'estres_academico' },
+  { texto: '¿Cómo te has sentido en términos de calma o relajación?', categoria: 'ansiedad' },
+  { texto: '¿Cómo describirías tu nivel de ansiedad o preocupación?', categoria: 'ansiedad' },
+  { texto: '¿Cómo ha sido tu capacidad para controlar tus preocupaciones?', categoria: 'ansiedad' },
+  { texto: '¿Cómo te has sentido respecto a la sensación de que algo malo podría pasar?', categoria: 'ansiedad' },
+  { texto: '¿Cómo te has sentido al enfrentar situaciones que te generan estrés o miedo?', categoria: 'estres_academico' },
+  { texto: '¿Cómo calificarías tu sensación de compañía o apoyo social?', categoria: 'relaciones_sociales' },
+  { texto: '¿Cómo te has sentido al manejar el estrés diario?', categoria: 'estres_academico' },
+  { texto: '¿Cómo te has sentido en términos de motivación para tus actividades diarias?', categoria: 'energia_motivacion' },
+  { texto: '¿Cómo calificarías tu satisfacción con la vida en general?', categoria: 'humor_depresivo' },
+  { texto: '¿Cómo percibes tu manejo de emociones recientemente?', categoria: 'humor_depresivo' },
+  { texto: '¿Cómo te has sentido respecto al apoyo de las personas que te rodean?', categoria: 'relaciones_sociales' },
+  { texto: '¿Cómo te has sentido respecto a tu visión del futuro (optimismo)?', categoria: 'humor_depresivo' },
+  { texto: '¿Cómo calificarías tu capacidad para disfrutar momentos cotidianos?', categoria: 'humor_depresivo' },
+  // ansiedad
+  { texto: '¿Con qué frecuencia sientes tensión física (manos frías, corazón acelerado) cuando algo te preocupa?', categoria: 'ansiedad' },
+  { texto: '¿Qué tan fácil te resulta calmarte después de sentirte nervioso o alterado?', categoria: 'ansiedad' },
+  { texto: '¿Sientes que te cuesta dejar de pensar en las cosas que te preocupan antes de dormir?', categoria: 'ansiedad' },
+  // estres_academico
+  { texto: '¿Qué tan agobiado te sientes por la carga de tareas, parciales o trabajos pendientes?', categoria: 'estres_academico' },
+  { texto: '¿Sientes que el tiempo no te alcanza para cumplir con tus responsabilidades académicas?', categoria: 'estres_academico' },
+  { texto: '¿Qué tan seguido postergas tus actividades académicas por sentirte abrumado?', categoria: 'estres_academico' },
+  // humor_depresivo
+  { texto: '¿Con qué frecuencia sientes tristeza o desánimo sin una razón clara?', categoria: 'humor_depresivo' },
+  { texto: '¿Has perdido interés en actividades que antes disfrutabas?', categoria: 'humor_depresivo' },
+  { texto: '¿Qué tan seguido sientes que nada de lo que haces tiene sentido?', categoria: 'humor_depresivo' },
+  // sueno
+  { texto: '¿Con qué frecuencia te despiertas durante la noche sin poder volver a dormir?', categoria: 'sueno' },
+  { texto: '¿Qué tan descansado te sientes al despertar por las mañanas?', categoria: 'sueno' },
+  { texto: '¿Te ha costado conciliar el sueño en los últimos días?', categoria: 'sueno' },
+  // relaciones_sociales
+  { texto: '¿Qué tan conectado te sientes con tus amigos o familiares actualmente?', categoria: 'relaciones_sociales' },
+  { texto: '¿Con qué frecuencia sientes que puedes contar con alguien cuando lo necesitas?', categoria: 'relaciones_sociales' },
+  { texto: '¿Te has sentido excluido o distanciado de las personas cercanas a ti?', categoria: 'relaciones_sociales' },
+  // autoestima_autocuidado
+  { texto: '¿Qué tan satisfecho te sientes con las decisiones que has tomado últimamente?', categoria: 'autoestima_autocuidado' },
+  { texto: '¿Con qué frecuencia dedicas tiempo a cuidar de ti mismo (higiene, alimentación, descanso)?', categoria: 'autoestima_autocuidado' },
+  { texto: '¿Qué tan seguido te tratas con la misma comprensión que le darías a un amigo?', categoria: 'autoestima_autocuidado' },
+  // energia_motivacion
+  { texto: '¿Qué tan motivado te sientes para comenzar tus actividades diarias?', categoria: 'energia_motivacion' },
+  { texto: '¿Con qué frecuencia sientes que te falta energía para terminar tus tareas?', categoria: 'energia_motivacion' },
+  { texto: '¿Qué tan seguido sientes ganas de hacer cosas nuevas o diferentes?', categoria: 'energia_motivacion' },
+];
+
+const TODOS_LOS_TEXTOS_REGISTRO_EMOCIONAL = PREGUNTAS_REGISTRO_EMOCIONAL_SEED.map((p) => p.texto);
+
+// Provisiona (idempotente) el catálogo de preguntas de registro emocional y
+// sus opciones. Se puede invocar de forma aislada al arranque sin ejecutar el
+// seed completo (que crea usuarios de prueba).
+export const ensurePreguntasRegistroEmocional = async () => {
+  const todasLasPreguntasSeed = PREGUNTAS_REGISTRO_EMOCIONAL_SEED;
+  const todosLosTextos = TODOS_LOS_TEXTOS_REGISTRO_EMOCIONAL;
+
+  const preguntasExistentes = await db
+    .select({
+      id: schema.preguntas_registro_emocional.id,
+      texto: schema.preguntas_registro_emocional.texto,
+    })
+    .from(schema.preguntas_registro_emocional)
+    .where(inArray(schema.preguntas_registro_emocional.texto, todosLosTextos));
+
+  const textosExistentes = new Set(preguntasExistentes.map((p) => p.texto));
+  const preguntasPorInsertar = todasLasPreguntasSeed.filter((p) => !textosExistentes.has(p.texto));
+
+  if (preguntasPorInsertar.length > 0) {
+    await db.insert(schema.preguntas_registro_emocional).values(
+      preguntasPorInsertar.map(({ texto, categoria }) => ({
+        texto,
+        categoria,
+        is_active: true,
+      }))
+    );
+    console.log(`${preguntasPorInsertar.length} pregunta(s) de registro emocional nuevas insertadas`);
+  }
+
+  // (Re)etiquetar la dimensión de TODAS las preguntas del catálogo, incluyendo
+  // las que ya existían antes de esta fase (por defecto habían quedado con
+  // categoria='general' al aplicarse la migración).
+  for (const dimension of [...DIMENSIONES_SEMAFORO] as DimensionSemaforo[]) {
+    const textosDeDimension = todasLasPreguntasSeed
+      .filter((p) => p.categoria === dimension)
+      .map((p) => p.texto);
+
+    if (textosDeDimension.length === 0) continue;
+
+    await db
+      .update(schema.preguntas_registro_emocional)
+      .set({ categoria: dimension })
+      .where(inArray(schema.preguntas_registro_emocional.texto, textosDeDimension));
+  }
+
+  const preguntasCreadas = await db
+    .select({
+      id: schema.preguntas_registro_emocional.id,
+      texto: schema.preguntas_registro_emocional.texto,
+    })
+    .from(schema.preguntas_registro_emocional)
+    .where(inArray(schema.preguntas_registro_emocional.texto, todosLosTextos));
+
+  // Opciones estándar (Likert 0-4). Se crean únicamente para las preguntas del
+  // catálogo que aún no tengan sus propias opciones, para no duplicar datos en
+  // despliegues donde las 20 preguntas originales ya existían.
+  const preguntaIdsSeed = preguntasCreadas.map((p) => p.id);
+  const opcionesExistentesDelSeed = preguntaIdsSeed.length > 0
+    ? await db
+      .select({ pregunta_id: schema.opciones_registro_emocional.pregunta_id })
+      .from(schema.opciones_registro_emocional)
+      .where(inArray(schema.opciones_registro_emocional.pregunta_id, preguntaIdsSeed))
+    : [];
+
+  const preguntaIdsConOpciones = new Set(opcionesExistentesDelSeed.map((o) => o.pregunta_id));
+  const preguntasSinOpciones = preguntasCreadas.filter((p) => !preguntaIdsConOpciones.has(p.id));
+
+  if (preguntasSinOpciones.length > 0) {
+    const opcionesEstandar = [
+      { nombre: 'Muy mal', descripcion: 'Muy insatisfecho o muy negativo', puntaje: 0 },
+      { nombre: 'Mal', descripcion: 'Insatisfecho o algo negativo', puntaje: 1 },
+      { nombre: 'Normal', descripcion: 'Neutral, sin cambios marcados', puntaje: 2 },
+      { nombre: 'Bien', descripcion: 'Satisfecho, positivo', puntaje: 3 },
+      { nombre: 'Excelente', descripcion: 'Muy satisfecho, muy positivo', puntaje: 4 },
+    ];
+
+    const opcionesRegistroEmocionalNuevas = preguntasSinOpciones.flatMap((pregunta) =>
+      opcionesEstandar.map((opcion) => ({
+        pregunta_id: pregunta.id,
+        nombre: opcion.nombre,
+        descripcion: opcion.descripcion,
+        url_imagen: '/images/registro-emocional/opcion.png',
+        puntaje: opcion.puntaje,
+        is_active: true,
+      }))
+    );
+
+    await db.insert(schema.opciones_registro_emocional).values(opcionesRegistroEmocionalNuevas);
+    console.log(`Opciones creadas para ${preguntasSinOpciones.length} pregunta(s) de registro emocional`);
+  } else {
+    console.log('Preguntas y opciones de registro emocional ya existen');
+  }
+};
+
+// Banco de preguntas de evaluaciones (semáforo). Usa EXACTAMENTE los mismos
+// textos que el catálogo de registro emocional, porque la encuesta diaria del
+// frontend cruza ambas tablas por texto normalizado. Idempotente.
+export const ensurePreguntasEvaluaciones = async () => {
+  const textos = TODOS_LOS_TEXTOS_REGISTRO_EMOCIONAL;
+
+  const existentes = await db
+    .select({ texto: schema.preguntas.texto })
+    .from(schema.preguntas)
+    .where(inArray(schema.preguntas.texto, textos));
+
+  const textosExistentes = new Set(existentes.map((p) => p.texto));
+  const preguntasPorInsertar = textos.filter((texto) => !textosExistentes.has(texto));
+
+  if (preguntasPorInsertar.length > 0) {
+    await db.insert(schema.preguntas).values(
+      preguntasPorInsertar.map((texto) => ({ texto, peso: 1 }))
+    );
+    console.log(`${preguntasPorInsertar.length} pregunta(s) de evaluaciones nuevas insertadas`);
+  } else {
+    console.log('Preguntas de evaluaciones ya existen');
+  }
+};
+
 async function seed() {
   console.log('Seeding database...');
   
@@ -140,153 +315,15 @@ async function seed() {
       console.log('Premios already exist, skipping seed');
     }
     
-    // Preguntas base (20 preguntas psicológicas originales), etiquetadas con
-    // su dimensión (Fase 5 — semáforo con subcategorías y dimensiones).
-    const preguntasBase: { texto: string; categoria: DimensionSemaforo }[] = [
-      { texto: '¿Cómo describirías tu estado de ánimo general durante la última semana?', categoria: 'humor_depresivo' },
-      { texto: '¿Cómo te has sentido respecto al interés o motivación para hacer actividades?', categoria: 'energia_motivacion' },
-      { texto: '¿Cómo ha sido la calidad de tu sueño recientemente?', categoria: 'sueno' },
-      { texto: '¿Cómo describirías tu nivel de energía en el día a día?', categoria: 'energia_motivacion' },
-      { texto: '¿Cómo percibes tu apetito en los últimos días?', categoria: 'humor_depresivo' },
-      { texto: '¿Cómo te has sentido contigo mismo (autoestima, autovaloración)?', categoria: 'autoestima_autocuidado' },
-      { texto: '¿Cómo calificarías tu capacidad de concentración?', categoria: 'estres_academico' },
-      { texto: '¿Cómo te has sentido en términos de calma o relajación?', categoria: 'ansiedad' },
-      { texto: '¿Cómo describirías tu nivel de ansiedad o preocupación?', categoria: 'ansiedad' },
-      { texto: '¿Cómo ha sido tu capacidad para controlar tus preocupaciones?', categoria: 'ansiedad' },
-      { texto: '¿Cómo te has sentido respecto a la sensación de que algo malo podría pasar?', categoria: 'ansiedad' },
-      { texto: '¿Cómo te has sentido al enfrentar situaciones que te generan estrés o miedo?', categoria: 'estres_academico' },
-      { texto: '¿Cómo calificarías tu sensación de compañía o apoyo social?', categoria: 'relaciones_sociales' },
-      { texto: '¿Cómo te has sentido al manejar el estrés diario?', categoria: 'estres_academico' },
-      { texto: '¿Cómo te has sentido en términos de motivación para tus actividades diarias?', categoria: 'energia_motivacion' },
-      { texto: '¿Cómo calificarías tu satisfacción con la vida en general?', categoria: 'humor_depresivo' },
-      { texto: '¿Cómo percibes tu manejo de emociones recientemente?', categoria: 'humor_depresivo' },
-      { texto: '¿Cómo te has sentido respecto al apoyo de las personas que te rodean?', categoria: 'relaciones_sociales' },
-      { texto: '¿Cómo te has sentido respecto a tu visión del futuro (optimismo)?', categoria: 'humor_depresivo' },
-      { texto: '¿Cómo calificarías tu capacidad para disfrutar momentos cotidianos?', categoria: 'humor_depresivo' },
-    ];
+    // Catálogo de preguntas de registro emocional y sus opciones
+    // (idempotente): inserta las que falten, (re)etiqueta la dimensión y crea
+    // las opciones Likert estándar para las preguntas que no tengan.
+    await ensurePreguntasRegistroEmocional();
 
-    // Fase 5: ampliación del pool con 3 preguntas nuevas por cada una de las
-    // siete dimensiones propuestas, para dar cobertura real al cálculo de
-    // dimensiones desde el primer despliegue.
-    const preguntasNuevasPorDimension: { texto: string; categoria: DimensionSemaforo }[] = [
-      // ansiedad
-      { texto: '¿Con qué frecuencia sientes tensión física (manos frías, corazón acelerado) cuando algo te preocupa?', categoria: 'ansiedad' },
-      { texto: '¿Qué tan fácil te resulta calmarte después de sentirte nervioso o alterado?', categoria: 'ansiedad' },
-      { texto: '¿Sientes que te cuesta dejar de pensar en las cosas que te preocupan antes de dormir?', categoria: 'ansiedad' },
-      // estres_academico
-      { texto: '¿Qué tan agobiado te sientes por la carga de tareas, parciales o trabajos pendientes?', categoria: 'estres_academico' },
-      { texto: '¿Sientes que el tiempo no te alcanza para cumplir con tus responsabilidades académicas?', categoria: 'estres_academico' },
-      { texto: '¿Qué tan seguido postergas tus actividades académicas por sentirte abrumado?', categoria: 'estres_academico' },
-      // humor_depresivo
-      { texto: '¿Con qué frecuencia sientes tristeza o desánimo sin una razón clara?', categoria: 'humor_depresivo' },
-      { texto: '¿Has perdido interés en actividades que antes disfrutabas?', categoria: 'humor_depresivo' },
-      { texto: '¿Qué tan seguido sientes que nada de lo que haces tiene sentido?', categoria: 'humor_depresivo' },
-      // sueno
-      { texto: '¿Con qué frecuencia te despiertas durante la noche sin poder volver a dormir?', categoria: 'sueno' },
-      { texto: '¿Qué tan descansado te sientes al despertar por las mañanas?', categoria: 'sueno' },
-      { texto: '¿Te ha costado conciliar el sueño en los últimos días?', categoria: 'sueno' },
-      // relaciones_sociales
-      { texto: '¿Qué tan conectado te sientes con tus amigos o familiares actualmente?', categoria: 'relaciones_sociales' },
-      { texto: '¿Con qué frecuencia sientes que puedes contar con alguien cuando lo necesitas?', categoria: 'relaciones_sociales' },
-      { texto: '¿Te has sentido excluido o distanciado de las personas cercanas a ti?', categoria: 'relaciones_sociales' },
-      // autoestima_autocuidado
-      { texto: '¿Qué tan satisfecho te sientes con las decisiones que has tomado últimamente?', categoria: 'autoestima_autocuidado' },
-      { texto: '¿Con qué frecuencia dedicas tiempo a cuidar de ti mismo (higiene, alimentación, descanso)?', categoria: 'autoestima_autocuidado' },
-      { texto: '¿Qué tan seguido te tratas con la misma comprensión que le darías a un amigo?', categoria: 'autoestima_autocuidado' },
-      // energia_motivacion
-      { texto: '¿Qué tan motivado te sientes para comenzar tus actividades diarias?', categoria: 'energia_motivacion' },
-      { texto: '¿Con qué frecuencia sientes que te falta energía para terminar tus tareas?', categoria: 'energia_motivacion' },
-      { texto: '¿Qué tan seguido sientes ganas de hacer cosas nuevas o diferentes?', categoria: 'energia_motivacion' },
-    ];
-
-    const todasLasPreguntasSeed = [...preguntasBase, ...preguntasNuevasPorDimension];
-    const todosLosTextos = todasLasPreguntasSeed.map((p) => p.texto);
-
-    const preguntasExistentes = await db
-      .select({
-        id: schema.preguntas_registro_emocional.id,
-        texto: schema.preguntas_registro_emocional.texto,
-      })
-      .from(schema.preguntas_registro_emocional)
-      .where(inArray(schema.preguntas_registro_emocional.texto, todosLosTextos));
-
-    const textosExistentes = new Set(preguntasExistentes.map((p) => p.texto));
-    const preguntasPorInsertar = todasLasPreguntasSeed.filter((p) => !textosExistentes.has(p.texto));
-
-    if (preguntasPorInsertar.length > 0) {
-      await db.insert(schema.preguntas_registro_emocional).values(
-        preguntasPorInsertar.map(({ texto, categoria }) => ({
-          texto,
-          categoria,
-          is_active: true,
-        }))
-      );
-      console.log(`${preguntasPorInsertar.length} pregunta(s) de registro emocional nuevas insertadas`);
-    }
-
-    // Fase 5: (re)etiquetar la dimensión de TODAS las preguntas del catálogo,
-    // incluyendo las que ya existían antes de esta fase (por defecto habían
-    // quedado con categoria='general' al aplicarse la migración).
-    for (const dimension of [...DIMENSIONES_SEMAFORO] as DimensionSemaforo[]) {
-      const textosDeDimension = todasLasPreguntasSeed
-        .filter((p) => p.categoria === dimension)
-        .map((p) => p.texto);
-
-      if (textosDeDimension.length === 0) continue;
-
-      await db
-        .update(schema.preguntas_registro_emocional)
-        .set({ categoria: dimension })
-        .where(inArray(schema.preguntas_registro_emocional.texto, textosDeDimension));
-    }
-
-    const preguntasCreadas = await db
-      .select({
-        id: schema.preguntas_registro_emocional.id,
-        texto: schema.preguntas_registro_emocional.texto,
-      })
-      .from(schema.preguntas_registro_emocional)
-      .where(inArray(schema.preguntas_registro_emocional.texto, todosLosTextos));
-
-    // Opciones estándar (Likert 0-4). Se crean únicamente para las preguntas
-    // del catálogo que aún no tengan sus propias opciones, para no duplicar
-    // datos en despliegues donde las 20 preguntas originales ya existían.
-    const preguntaIdsSeed = preguntasCreadas.map((p) => p.id);
-    const opcionesExistentesDelSeed = preguntaIdsSeed.length > 0
-      ? await db
-        .select({ pregunta_id: schema.opciones_registro_emocional.pregunta_id })
-        .from(schema.opciones_registro_emocional)
-        .where(inArray(schema.opciones_registro_emocional.pregunta_id, preguntaIdsSeed))
-      : [];
-
-    const preguntaIdsConOpciones = new Set(opcionesExistentesDelSeed.map((o) => o.pregunta_id));
-    const preguntasSinOpciones = preguntasCreadas.filter((p) => !preguntaIdsConOpciones.has(p.id));
-
-    if (preguntasSinOpciones.length > 0) {
-      const opcionesEstandar = [
-        { nombre: 'Muy mal', descripcion: 'Muy insatisfecho o muy negativo', puntaje: 0 },
-        { nombre: 'Mal', descripcion: 'Insatisfecho o algo negativo', puntaje: 1 },
-        { nombre: 'Normal', descripcion: 'Neutral, sin cambios marcados', puntaje: 2 },
-        { nombre: 'Bien', descripcion: 'Satisfecho, positivo', puntaje: 3 },
-        { nombre: 'Excelente', descripcion: 'Muy satisfecho, muy positivo', puntaje: 4 },
-      ];
-
-      const opcionesRegistroEmocionalNuevas = preguntasSinOpciones.flatMap((pregunta) =>
-        opcionesEstandar.map((opcion) => ({
-          pregunta_id: pregunta.id,
-          nombre: opcion.nombre,
-          descripcion: opcion.descripcion,
-          url_imagen: '/images/registro-emocional/opcion.png',
-          puntaje: opcion.puntaje,
-          is_active: true,
-        }))
-      );
-
-      await db.insert(schema.opciones_registro_emocional).values(opcionesRegistroEmocionalNuevas);
-      console.log(`Opciones creadas para ${preguntasSinOpciones.length} pregunta(s) de registro emocional`);
-    } else {
-      console.log('Preguntas y opciones de registro emocional ya existen');
-    }
+    // Banco de preguntas de evaluaciones (mismos textos que el catálogo de
+    // registro emocional). Es la tabla que usa la encuesta diaria del frontend
+    // para cruzar por texto ambas fuentes de preguntas.
+    await ensurePreguntasEvaluaciones();
 
     // ================================
     // SEED: ENCUESTA ONBOARDING INICIAL (Fase 7)

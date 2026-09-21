@@ -9,7 +9,12 @@ import { Server as SocketServer } from 'socket.io';
 
 // DB
 import { runMigrations } from './db/migrate';
-import { seed, ensureOnboardingSurvey } from './db/seed';
+import {
+  seed,
+  ensureOnboardingSurvey,
+  ensurePreguntasRegistroEmocional,
+  ensurePreguntasEvaluaciones,
+} from './db/seed';
 
 // WEBSOCKET & SWAGGER
 import { setupWebSocket } from './websocket/socket';
@@ -133,6 +138,13 @@ void (async () => {
     // Garantiza el catalogo de onboarding (idempotente) sin ejecutar el seed
     // completo, que crea usuarios de prueba.
     await ensureOnboardingSurvey();
+
+    // Garantiza los bancos de preguntas de la encuesta diaria (idempotentes):
+    // el catálogo de registro emocional con sus opciones y el banco de
+    // evaluaciones con los mismos textos, para que el frontend pueda cruzar
+    // ambas fuentes por texto normalizado.
+    await ensurePreguntasRegistroEmocional();
+    await ensurePreguntasEvaluaciones();
 
     if (process.env.SEED_ON_START === 'true') {
       console.log('Running database seed...');
