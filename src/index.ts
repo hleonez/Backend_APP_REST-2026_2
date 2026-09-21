@@ -9,7 +9,7 @@ import { Server as SocketServer } from 'socket.io';
 
 // DB
 import { runMigrations } from './db/migrate';
-import { seed } from './db/seed';
+import { seed, ensureOnboardingSurvey } from './db/seed';
 
 // WEBSOCKET & SWAGGER
 import { setupWebSocket } from './websocket/socket';
@@ -129,6 +129,10 @@ void (async () => {
   try {
     console.log('Initializing database...');
     await runMigrations();
+
+    // Garantiza el catalogo de onboarding (idempotente) sin ejecutar el seed
+    // completo, que crea usuarios de prueba.
+    await ensureOnboardingSurvey();
 
     if (process.env.SEED_ON_START === 'true') {
       console.log('Running database seed...');

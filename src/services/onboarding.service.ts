@@ -25,25 +25,40 @@ export const getPreguntasOnboardingService = async (usuarioId: number) => {
     )
     .limit(1);
 
-  if (!encuesta) {
-    throw new Error('Encuesta de onboarding no encontrada');
-  }
-
   const [usuario] = await db
     .select({ onboarding_completado: schema.usuarios.onboarding_completado })
     .from(schema.usuarios)
     .where(eq(schema.usuarios.id, usuarioId))
     .limit(1);
 
-  const data: OnboardingData = encuesta.opciones
-    ? JSON.parse(encuesta.opciones)
-    : { preguntas: [] };
+  const completado = usuario?.onboarding_completado ?? false;
+
+  // La ausencia del catalogo no es un error de servidor: es un estado valido
+  // de negocio (encuesta aun no sembrada). Se responde 200 con lista vacia.
+  if (!encuesta) {
+    return {
+      encuesta_id: null,
+      titulo: null,
+      preguntas: [],
+      completado,
+    };
+  }
+
+  let data: OnboardingData = { preguntas: [] };
+  if (encuesta.opciones) {
+    try {
+      data = JSON.parse(encuesta.opciones) as OnboardingData;
+    } catch (error) {
+      console.warn('No se pudo parsear encuesta.opciones del onboarding:', error);
+      data = { preguntas: [] };
+    }
+  }
 
   return {
     encuesta_id: encuesta.id,
     titulo: encuesta.titulo,
-    preguntas: data.preguntas,
-    completado: usuario?.onboarding_completado ?? false,
+    preguntas: Array.isArray(data.preguntas) ? data.preguntas : [],
+    completado,
   };
 };
 
@@ -63,7 +78,9 @@ export const saveRespuestasOnboardingService = async (
     .limit(1);
 
   if (!encuesta) {
-    throw new Error('Encuesta de onboarding no encontrada');
+    const error = new Error('Encuesta de onboarding no encontrada');
+    (error as any).code = 'ENCUESTA_NO_ENCONTRADA';
+    throw error;
   }
 
   const [usuario] = await db
