@@ -21,7 +21,7 @@ export const getPreguntasOnboarding = async (req: AuthRequest, res: Response): P
     if (!req.user?.id) { res.status(401).json({ message: 'Usuario no autenticado' }); return; }
 
     const data = await getPreguntasOnboardingService(req.user.id);
-    res.json(data);
+    res.status(200).json(data);
   } catch (error) {
     console.error('Error get preguntas onboarding:', error);
     res.status(500).json({ message: 'Error en el servidor' });
@@ -49,6 +49,10 @@ export const saveRespuestasOnboarding = async (req: AuthRequest, res: Response):
     console.error('Error save respuestas onboarding:', error);
     if (error.message === 'El onboarding ya fue completado anteriormente') {
       res.status(409).json({ message: error.message });
+      return;
+    }
+    if (error?.code === 'ENCUESTA_NO_ENCONTRADA') {
+      res.status(404).json({ message: error.message });
       return;
     }
     res.status(500).json({ message: 'Error en el servidor' });
