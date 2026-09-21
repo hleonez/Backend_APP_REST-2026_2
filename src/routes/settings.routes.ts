@@ -61,6 +61,7 @@ router.put("/profile", authenticate, isUsuario, settingsController.updateProfile
  *         description: Requiere rol usuario
  */
 router.put("/preferences", authenticate, isUsuario, settingsController.updatePreferences);
+router.put("/change-password", authenticate, isUsuario, settingsController.changePassword);
 
 /**
  * @swagger
