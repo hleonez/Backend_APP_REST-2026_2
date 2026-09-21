@@ -1,7 +1,11 @@
 name: Sync main -> develop
 
 # Después de cada merge a `main`, abre (o reutiliza) un Pull Request de
-# `main` hacia `develop` para que `develop` quede alineada con `main`.
+# `main` hacia `develop` para que `develop` quede alineada con `main`, y le
+# activa auto-merge para que se fusione solo en cuanto pasen los checks
+# obligatorios (CI + Branch Policy). El merge SIEMPRE es un merge commit
+# real (`--merge`, nunca `--squash` ni `--rebase`), para que `main` quede
+# como ancestro directo de `develop` y el historial no se reescriba.
 #
 # Esta es la ÚNICA vía permitida para llevar cambios de `main` a `develop`:
 # el PR lo crea siempre este workflow con `github-actions[bot]` como autor.
@@ -19,7 +23,7 @@ permissions:
 
 jobs:
   sync-pr:
-    name: Abrir o verificar PR de sincronización
+    name: Abrir/actualizar PR de sincronización y activar auto-merge
     runs-on: ubuntu-latest
     steps:
       - name: Checkout del repositorio
@@ -60,12 +64,35 @@ jobs:
             --base develop \
             --head main \
             --title "chore: sync main -> develop" \
-            --body "PR automático creado por el workflow de sincronización. Alinea \`develop\` con los últimos cambios fusionados en \`main\`."
+            --body "PR automático creado por el workflow de sincronización. Alinea \`develop\` con los últimos cambios fusionados en \`main\`. Se fusiona solo (auto-merge, merge commit) en cuanto pasan los checks obligatorios (CI + Branch Policy). No requiere revisión manual."
 
       - name: Nada que sincronizar
         if: steps.diff.outputs.has_diff == 'false'
         run: echo "develop ya está al día con main, no se crea PR."
 
-      - name: PR de sincronización ya existe
-        if: steps.diff.outputs.has_diff == 'true' && steps.existing_pr.outputs.number != ''
-        run: echo "Ya existe un PR abierto (#${{ steps.existing_pr.outputs.number }}) de main hacia develop; se actualiza automáticamente con los nuevos commits de main."
+      - name: Activar auto-merge (merge commit) en el PR de sincronización
+        if: steps.diff.outputs.has_diff == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pr_number="${{ steps.existing_pr.outputs.number }}"
+
+          if [ -z "$pr_number" ]; then
+            # El PR se acaba de crear en el paso anterior; volvemos a
+            # buscarlo para obtener su número (gh pr create no lo devuelve
+            # como JSON directamente).
+            pr_number=$(gh pr list \
+              --base develop \
+              --head main \
+              --state open \
+              --json number \
+              --jq '.[0].number // empty')
+          fi
+
+          if [ -z "$pr_number" ]; then
+            echo "No se pudo encontrar el PR de sincronización main -> develop; no se puede activar auto-merge."
+            exit 1
+          fi
+
+          echo "Activando auto-merge (merge commit real) en el PR #$pr_number..."
+          gh pr merge "$pr_number" --auto --merge

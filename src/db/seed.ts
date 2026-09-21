@@ -85,6 +85,7 @@ async function seed() {
           url_imagen: '/images/actividades/naturaleza.png',
           is_active: true,
         },
+               
         {
           nombre: 'Conexión social',
           descripcion: 'Llamar o pasar tiempo con amigos y seres queridos',
@@ -285,6 +286,48 @@ async function seed() {
       console.log(`Opciones creadas para ${preguntasSinOpciones.length} pregunta(s) de registro emocional`);
     } else {
       console.log('Preguntas y opciones de registro emocional ya existen');
+    }
+
+    // ================================
+    // SEED: ENCUESTA ONBOARDING INICIAL (Fase 7)
+    // ================================
+    const encuestaOnboardingExiste = await db
+      .select({ id: schema.encuestas.id })
+      .from(schema.encuestas)
+      .where(eq(schema.encuestas.codigo, 'ONBOARDING_INICIAL'))
+      .limit(1);
+
+    if (encuestaOnboardingExiste.length === 0) {
+      const preguntasOnboarding = [
+        { id: 'onb_01', texto: '¿Cómo describirías tu nivel de ansiedad en general?', categoria: 'ansiedad', escala: '0-4' },
+        { id: 'onb_02', texto: '¿Con qué frecuencia sientes preocupación excesiva por cosas que podrían salir mal?', categoria: 'ansiedad', escala: '0-4' },
+        { id: 'onb_03', texto: '¿Qué tan agobiado te sientes por tus responsabilidades académicas?', categoria: 'estres_academico', escala: '0-4' },
+        { id: 'onb_04', texto: '¿Sientes que el tiempo no te alcanza para cumplir con tus tareas y parciales?', categoria: 'estres_academico', escala: '0-4' },
+        { id: 'onb_05', texto: '¿Cómo describirías tu estado de ánimo durante las últimas dos semanas?', categoria: 'humor_depresivo', escala: '0-4' },
+        { id: 'onb_06', texto: '¿Con qué frecuencia sientes tristeza o desánimo sin una razón clara?', categoria: 'humor_depresivo', escala: '0-4' },
+        { id: 'onb_07', texto: '¿Cómo ha sido la calidad de tu sueño recientemente?', categoria: 'sueno', escala: '0-4' },
+        { id: 'onb_08', texto: '¿Te ha costado conciliar el sueño o te despiertas durante la noche?', categoria: 'sueno', escala: '0-4' },
+        { id: 'onb_09', texto: '¿Qué tan conectado te sientes con tus amigos o familiares?', categoria: 'relaciones_sociales', escala: '0-4' },
+        { id: 'onb_10', texto: '¿Sientes que puedes contar con alguien cuando lo necesitas?', categoria: 'relaciones_sociales', escala: '0-4' },
+        { id: 'onb_11', texto: '¿Qué tan satisfecho te sientes contigo mismo y con las decisiones que tomas?', categoria: 'autoestima_autocuidado', escala: '0-4' },
+        { id: 'onb_12', texto: '¿Con qué frecuencia dedicas tiempo a cuidar de ti mismo (alimentación, descanso, higiene)?', categoria: 'autoestima_autocuidado', escala: '0-4' },
+        { id: 'onb_13', texto: '¿Qué tan motivado te sientes para comenzar tus actividades diarias?', categoria: 'energia_motivacion', escala: '0-4' },
+        { id: 'onb_14', texto: '¿Con qué frecuencia sientes que te falta energía para terminar tus tareas?', categoria: 'energia_motivacion', escala: '0-4' },
+        { id: 'onb_15', texto: '¿Cómo describirías tu capacidad para disfrutar de las cosas que antes te gustaban?', categoria: 'humor_depresivo', escala: '0-4' },
+        { id: 'onb_16', texto: '¿Qué tan seguido sientes que te cuesta concentrarte en tus actividades?', categoria: 'estres_academico', escala: '0-4' },
+        { id: 'onb_17', texto: '¿Has notado cambios en tu apetito en las últimas semanas?', categoria: 'humor_depresivo', escala: '0-4' },
+        { id: 'onb_18', texto: '¿Qué tan seguido sientes ganas de hacer cosas nuevas o diferentes?', categoria: 'energia_motivacion', escala: '0-4' },
+      ];
+
+      await db.insert(schema.encuestas).values({
+        codigo: 'ONBOARDING_INICIAL',
+        titulo: 'Encuesta Inicial de Bienestar',
+        opciones: JSON.stringify({ preguntas: preguntasOnboarding }),
+      });
+
+      console.log('Encuesta ONBOARDING_INICIAL seeded successfully');
+    } else {
+      console.log('Encuesta ONBOARDING_INICIAL already exists, skipping seed');
     }
 
     // ================================

@@ -3,6 +3,7 @@ import { db } from '../db';
 import * as schema from '../db/schema';
 import { toIsoDate } from '../shared/utils/fechas.utils';
 import { analizarPatronesEmocionales, type PerfilEmocional } from './user-profile.service';
+import { DIMENSIONES_SEMAFORO } from '../shared/utils/semaforo-dimensiones.utils';
 
 type ColorSemaforo = 'verde' | 'amarillo' | 'rojo';
 type NivelBienestar = 'bajo' | 'medio' | 'alto';
@@ -36,48 +37,6 @@ interface PuntuacionDimensional {
   sumatoria: number;
   total: number;
 }
-
-interface ReglaDimension {
-  dimension: string;
-  keywords: string[];
-}
-
-const REGLAS_DIMENSIONES: ReglaDimension[] = [
-  { dimension: 'sueno', keywords: ['sueño', 'sueno', 'dorm', 'insomnio', 'pesadilla'] },
-  { dimension: 'energia', keywords: ['energía', 'energia', 'cansancio', 'cansado', 'fatig', 'agot'] },
-  { dimension: 'apetito', keywords: ['apetito', 'comida', 'hambre'] },
-  { dimension: 'autoestima', keywords: ['autoestima', 'autoval', 'valgo', 'fracaso', 'inutil', 'inútil'] },
-  { dimension: 'concentracion', keywords: ['concentr', 'atencion', 'atención', 'enfoque'] },
-  { dimension: 'calma', keywords: ['calma', 'relaj', 'tranquil', 'paz'] },
-  { dimension: 'ansiedad', keywords: ['ansiedad', 'preocup', 'nerv', 'miedo', 'alerta'] },
-  { dimension: 'estres', keywords: ['estrés', 'estres', 'estres', 'tension', 'tensión', 'estres diario', 'estrés diario'] },
-  { dimension: 'apoyo_social', keywords: ['apoyo social', 'apoyo de las personas', 'compañ', 'compañía', 'soledad', 'solo'] },
-  { dimension: 'motivacion', keywords: ['motiv', 'interés', 'interes', 'actividades'] },
-  { dimension: 'satisfaccion', keywords: ['satisfacción', 'satisfaccion', 'optimismo', 'disfrutar', 'vida en general'] },
-  { dimension: 'manejo_emocional', keywords: ['manejo de emociones', 'emocion', 'emoción', 'regular'] },
-  { dimension: 'estado_animo', keywords: ['estado de ánimo', 'estado de animo', 'ánimo', 'animo', 'general'] },
-  { dimension: 'general', keywords: [] },
-];
-
-const normalizarTexto = (texto: string): string =>
-  texto
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .trim();
-
-const inferirDimension = (textoPregunta: string, textoOpcion?: string | null): string => {
-  const texto = normalizarTexto(`${textoPregunta} ${textoOpcion ?? ''}`);
-
-  for (const regla of REGLAS_DIMENSIONES) {
-    if (regla.keywords.length === 0) continue;
-    if (regla.keywords.some((keyword) => texto.includes(keyword))) {
-      return regla.dimension;
-    }
-  }
-
-  return 'general';
-};
 
 const calcularNivel = (media: number, maximo: number): NivelBienestar => {
   const normalizado = maximo <= 0 ? 0 : (media / maximo) * 100;
@@ -181,47 +140,82 @@ const obtenerUltimoSemaforo = async (usuarioId: number): Promise<SemaforoActual 
   };
 };
 
-const obtenerDimensionesUltimaEvaluacion = async (usuarioId: number): Promise<DimensionAgregada[]> => {
-  const [ultimaEvaluacion] = await db
-    .select({
-      id: schema.evaluaciones.id,
-    })
-    .from(schema.evaluaciones)
+/**
+ * Fase 7: Lee las respuestas reales del onboarding de encuestas_respuestas,
+ * asociadas a la encuesta con codigo='ONBOARDING_INICIAL'. Las respuestas
+ * se almacenan como JSON con formato { respuestas: [{ pregunta_id, puntaje }] }.
+ * Cada pregunta del onboarding tiene una categoria que mapea a las 7 dimensiones
+ * canónicas del semáforo.
+ */
+const obtenerOnboardingBase = async (usuarioId: number): Promise<DimensionAgregada[]> => {
+  const [encuesta] = await db
+    .select({ id: schema.encuestas.id })
+    .from(schema.encuestas)
     .where(
       and(
-        eq(schema.evaluaciones.usuario_id, usuarioId),
-        isNull(schema.evaluaciones.deleted_at),
+        eq(schema.encuestas.codigo, 'ONBOARDING_INICIAL'),
+        isNull(schema.encuestas.deleted_at),
       ),
     )
-    .orderBy(desc(schema.evaluaciones.fecha))
     .limit(1);
 
-  if (!ultimaEvaluacion) return [];
+  if (!encuesta) return [];
 
-  const respuestas = await db
-    .select({
-      respuesta: schema.respuestas.respuesta,
-      pregunta_texto: schema.preguntas.texto,
-    })
-    .from(schema.respuestas)
-    .innerJoin(schema.preguntas, eq(schema.respuestas.pregunta_id, schema.preguntas.id))
+  const [respuestaEncuesta] = await db
+    .select({ respuesta: schema.encuestasRespuestas.respuesta })
+    .from(schema.encuestasRespuestas)
     .where(
       and(
-        eq(schema.respuestas.evaluacion_id, ultimaEvaluacion.id),
-        isNull(schema.respuestas.deleted_at),
-        isNull(schema.preguntas.deleted_at),
+        eq(schema.encuestasRespuestas.usuario_id, usuarioId),
+        eq(schema.encuestasRespuestas.encuesta_id, encuesta.id),
+        isNull(schema.encuestasRespuestas.deleted_at),
       ),
     )
-    .orderBy(desc(schema.respuestas.updated_at));
+    .orderBy(desc(schema.encuestasRespuestas.fecha))
+    .limit(1);
 
-  const items = respuestas.map((item) => ({
-    dimension: inferirDimension(item.pregunta_texto),
-    puntaje: Number(item.respuesta ?? 0),
-  }));
+  if (!respuestaEncuesta?.respuesta) return [];
 
-  return agruparPromedios(items, 5);
+  try {
+    const data = JSON.parse(respuestaEncuesta.respuesta) as {
+      respuestas: Array<{ pregunta_id: string; puntaje: number }>;
+    };
+
+    if (!data.respuestas || !Array.isArray(data.respuestas)) return [];
+
+    const [encuestaRow] = await db
+      .select({ opciones: schema.encuestas.opciones })
+      .from(schema.encuestas)
+      .where(eq(schema.encuestas.id, encuesta.id))
+      .limit(1);
+
+    if (!encuestaRow?.opciones) return [];
+
+    const preguntasData = JSON.parse(encuestaRow.opciones) as {
+      preguntas: Array<{ id: string; categoria: string }>;
+    };
+
+    const preguntaDimensionMap = new Map<string, string>();
+    for (const p of preguntasData.preguntas) {
+      preguntaDimensionMap.set(p.id, p.categoria);
+    }
+
+    const items = data.respuestas.map((r) => ({
+      dimension: preguntaDimensionMap.get(r.pregunta_id) ?? 'general',
+      puntaje: r.puntaje,
+    }));
+
+    return agruparPromedios(items, 4);
+  } catch {
+    return [];
+  }
 };
 
+/**
+ * Lee el registro emocional de los últimos 7 días usando directamente la
+ * columna categoria de preguntas_registro_emocional (las 7 dimensiones
+ * canónicas), en lugar de inferir la dimensión por heurísticas de texto.
+ */
 const obtenerRegistroEmocional7d = async (usuarioId: number): Promise<DimensionAgregada[]> => {
   const hoy = new Date();
   const inicio = new Date(hoy);
@@ -230,13 +224,10 @@ const obtenerRegistroEmocional7d = async (usuarioId: number): Promise<DimensionA
   const registros = await db
     .select({
       puntaje: schema.registro_emocional.puntaje,
-      pregunta_texto: schema.preguntas_registro_emocional.texto,
-      opcion_nombre: schema.opciones_registro_emocional.nombre,
-      fecha_dia: schema.registro_emocional.fecha_dia,
+      categoria: schema.preguntas_registro_emocional.categoria,
     })
     .from(schema.registro_emocional)
     .leftJoin(schema.preguntas_registro_emocional, eq(schema.registro_emocional.pregunta_id, schema.preguntas_registro_emocional.id))
-    .leftJoin(schema.opciones_registro_emocional, eq(schema.registro_emocional.opcion_id, schema.opciones_registro_emocional.id))
     .where(
       and(
         eq(schema.registro_emocional.usuario_id, usuarioId),
@@ -244,12 +235,11 @@ const obtenerRegistroEmocional7d = async (usuarioId: number): Promise<DimensionA
         lte(schema.registro_emocional.fecha_dia, toIsoDate(hoy)),
         isNull(schema.registro_emocional.deleted_at),
         isNull(schema.preguntas_registro_emocional.deleted_at),
-        isNull(schema.opciones_registro_emocional.deleted_at),
       ),
     );
 
   const items = registros.map((registro) => ({
-    dimension: inferirDimension(registro.pregunta_texto ?? '', registro.opcion_nombre ?? ''),
+    dimension: registro.categoria ?? 'general',
     puntaje: Number(registro.puntaje ?? 0),
   }));
 
@@ -260,7 +250,7 @@ export const construirContextoBienestar = async (usuarioId: number): Promise<Con
   const [perfilEmocional, semaforoActual, onboardingBase, registro7d] = await Promise.all([
     analizarPatronesEmocionales(usuarioId, 25),
     obtenerUltimoSemaforo(usuarioId),
-    obtenerDimensionesUltimaEvaluacion(usuarioId),
+    obtenerOnboardingBase(usuarioId),
     obtenerRegistroEmocional7d(usuarioId),
   ]);
 
@@ -289,3 +279,9 @@ export const construirContextoBienestar = async (usuarioId: number): Promise<Con
     bloque_prompt: formatearBloquePrompt(datos),
   };
 };
+
+/**
+ * Función auxiliar exportada para que otros servicios puedan leer la base
+ * de onboarding de un usuario (ej: selector-estilo, registro emocional adaptativo).
+ */
+export const obtenerOnboardingBaseDimensiones = obtenerOnboardingBase;

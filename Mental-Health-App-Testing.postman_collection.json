@@ -1,9 +1,11 @@
 {
   "info": {
-    "_postman_id": "salud-mental-api-2026",
+    "_postman_id": "7c2f35a0-fd6c-4e98-a950-774841aef6e5",
     "name": "Salud Mental API - Testing Completo",
     "description": "Endpoints para Registro Emocional y Chatbot IA - Testing Rápido",
-    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "58098317",
+    "_collection_link": "https://go.postman.co/collection/58098317-7c2f35a0-fd6c-4e98-a950-774841aef6e5?source=collection_link"
   },
   "item": [
     {
@@ -19,8 +21,8 @@
                 "exec": [
                   "var jsonData = pm.response.json();",
                   "if (jsonData.token) {",
-                  "    pm.globals.set('token-usuario', jsonData.token);",
-                  "    pm.globals.set('usuarioId', jsonData.usuario?.id);",
+                  "    pm.collectionVariables.set('token-usuario', jsonData.token);",
+                  "    pm.collectionVariables.set('usuarioId', jsonData.user?.id);",
                   "    console.log('✅ Registro exitoso. Token Usuario guardado: ' + jsonData.token.substring(0,20) + '...');",
                   "} else {",
                   "    console.log('ℹ️ Registro completado (sin auto-login o revisa respuesta):', jsonData);",
@@ -32,7 +34,10 @@
           "request": {
             "method": "POST",
             "header": [
-              {"key": "Content-Type", "value": "application/json"}
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -41,11 +46,18 @@
             "url": {
               "raw": "http://localhost:3000/api/auth/register",
               "protocol": "http",
-              "host": ["localhost"],
+              "host": [
+                "localhost"
+              ],
               "port": "3000",
-              "path": ["api", "auth", "register"]
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Login Admin",
@@ -57,8 +69,8 @@
                 "exec": [
                   "var jsonData = pm.response.json();",
                   "if (jsonData.token) {",
-                  "    pm.globals.set('token-admin', jsonData.token);",
-                  "    pm.globals.set('adminId', jsonData.usuario?.id || 1);",
+                  "    pm.collectionVariables.set('token-admin', jsonData.token);",
+                  "    pm.collectionVariables.set('adminId', jsonData.user?.id || 1);",
                   "    console.log('✅ Token Admin guardado: ' + jsonData.token.substring(0,20) + '...');",
                   "} else {",
                   "    console.log('❌ No se pudo guardar token. Respuesta:', jsonData);",
@@ -70,7 +82,10 @@
           "request": {
             "method": "POST",
             "header": [
-              {"key": "Content-Type", "value": "application/json"}
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -79,11 +94,18 @@
             "url": {
               "raw": "http://localhost:3000/api/auth/login",
               "protocol": "http",
-              "host": ["localhost"],
+              "host": [
+                "localhost"
+              ],
               "port": "3000",
-              "path": ["api", "auth", "login"]
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Login Psicologo",
@@ -93,35 +115,46 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "var jsonData = pm.response.json();",
-                  "if (jsonData.token) {",
-                  "    pm.globals.set('token-psicologo', jsonData.token);",
-                  "    pm.globals.set('psicologoId', jsonData.usuario?.id || 2);",
-                  "    console.log('✅ Token Psicologo guardado: ' + jsonData.token.substring(0,20) + '...');",
-                  "} else {",
-                  "    console.log('❌ No se pudo guardar token. Respuesta:', jsonData);",
-                  "}"
+                  "var jsonData = pm.response.json();\nif (jsonData.token) {\n    pm.collectionVariables.set('token-psicologo', jsonData.token);\n    pm.collectionVariables.set('psicologoId', jsonData.user?.id || 2);\n    console.log('✅ Token Psicologo guardado: ' + jsonData.token.substring(0,20) + '...');\n} else {\n    console.log('❌ No se pudo guardar token. Respuesta:', jsonData);\n}"
                 ]
               }
             }
           ],
           "request": {
+            "auth": {
+              "type": "noauth"
+            },
             "method": "POST",
             "header": [
-              {"key": "Content-Type", "value": "application/json"}
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"correo\":\"psicologo@test.com\",\"contrasena\":\"12345678\"}"
+              "raw": "{\"correo\":\"psicologo@test.com\",\"contrasena\":\"12345678\"}",
+              "options": {
+                "raw": {
+                  "language": "text"
+                }
+              }
             },
             "url": {
               "raw": "http://localhost:3000/api/auth/login",
               "protocol": "http",
-              "host": ["localhost"],
+              "host": [
+                "localhost"
+              ],
               "port": "3000",
-              "path": ["api", "auth", "login"]
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Login Usuario",
@@ -133,8 +166,8 @@
                 "exec": [
                   "var jsonData = pm.response.json();",
                   "if (jsonData.token) {",
-                  "    pm.globals.set('token-usuario', jsonData.token);",
-                  "    pm.globals.set('usuarioId', jsonData.usuario?.id || 3);",
+                  "    pm.collectionVariables.set('token-usuario', jsonData.token);",
+                  "    pm.collectionVariables.set('usuarioId', jsonData.user?.id || 3);",
                   "    console.log('✅ Token Usuario guardado: ' + jsonData.token.substring(0,20) + '...');",
                   "} else {",
                   "    console.log('❌ No se pudo guardar token. Respuesta:', jsonData);",
@@ -146,7 +179,10 @@
           "request": {
             "method": "POST",
             "header": [
-              {"key": "Content-Type", "value": "application/json"}
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -160,11 +196,18 @@
             "url": {
               "raw": "http://localhost:3000/api/auth/login",
               "protocol": "http",
-              "host": ["localhost"],
+              "host": [
+                "localhost"
+              ],
               "port": "3000",
-              "path": ["api", "auth", "login"]
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
             }
-          }
+          },
+          "response": []
         }
       ]
     },
@@ -175,30 +218,46 @@
           "name": "Health Check",
           "request": {
             "method": "GET",
+            "header": [],
             "url": {
               "raw": "http://localhost:3000/health",
               "protocol": "http",
-              "host": ["localhost"],
+              "host": [
+                "localhost"
+              ],
               "port": "3000",
-              "path": ["health"]
+              "path": [
+                "health"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "PASO 3 - GET Preguntas",
           "request": {
             "method": "GET",
             "header": [
-              {"key": "Authorization", "value": "Bearer {{token-usuario}}"}
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token-usuario}}"
+              }
             ],
             "url": {
               "raw": "http://localhost:3000/api/registro-emocional/preguntas",
               "protocol": "http",
-              "host": ["localhost"],
+              "host": [
+                "localhost"
+              ],
               "port": "3000",
-              "path": ["api", "registro-emocional", "preguntas"]
+              "path": [
+                "api",
+                "registro-emocional",
+                "preguntas"
+              ]
             }
-          }
+          },
+          "response": []
         }
       ]
     },
@@ -210,8 +269,14 @@
           "request": {
             "method": "POST",
             "header": [
-              {"key": "Authorization", "value": "Bearer {{token-usuario}}"},
-              {"key": "Content-Type", "value": "application/json"}
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token-usuario}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -220,27 +285,46 @@
             "url": {
               "raw": "http://localhost:3000/api/registro-emocional",
               "protocol": "http",
-              "host": ["localhost"],
+              "host": [
+                "localhost"
+              ],
               "port": "3000",
-              "path": ["api", "registro-emocional"]
+              "path": [
+                "api",
+                "registro-emocional"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "GET Respuestas por Fecha (DD-MM-YYYY)",
           "request": {
             "method": "GET",
             "header": [
-              {"key": "Authorization", "value": "Bearer {{token-usuario}}"}
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token-usuario}}"
+              }
             ],
             "url": {
               "raw": "http://localhost:3000/api/registro-emocional/usuarios/3/fecha/17-03-2026",
               "protocol": "http",
-              "host": ["localhost"],
+              "host": [
+                "localhost"
+              ],
               "port": "3000",
-              "path": ["api", "registro-emocional", "usuarios", "3", "fecha", "17-03-2026"]
+              "path": [
+                "api",
+                "registro-emocional",
+                "usuarios",
+                "3",
+                "fecha",
+                "17-03-2026"
+              ]
             }
-          }
+          },
+          "response": []
         }
       ]
     },
@@ -252,71 +336,121 @@
           "request": {
             "method": "GET",
             "header": [
-              {"key": "Authorization", "value": "Bearer {{token-usuario}}"}
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token-usuario}}"
+              }
             ],
             "url": {
               "raw": "http://localhost:3000/api/registro-emocional/calendario?inicio=2026-01-01&fin=2026-12-31",
               "protocol": "http",
-              "host": ["localhost"],
+              "host": [
+                "localhost"
+              ],
               "port": "3000",
-              "path": ["api", "registro-emocional", "calendario"],
+              "path": [
+                "api",
+                "registro-emocional",
+                "calendario"
+              ],
               "query": [
-                {"key": "inicio", "value": "2026-01-01"},
-                {"key": "fin", "value": "2026-12-31"}
+                {
+                  "key": "inicio",
+                  "value": "2026-01-01"
+                },
+                {
+                  "key": "fin",
+                  "value": "2026-12-31"
+                }
               ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "PASO 6 - GET Rachas",
           "request": {
             "method": "GET",
             "header": [
-              {"key": "Authorization", "value": "Bearer {{token-usuario}}"}
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token-usuario}}"
+              }
             ],
             "url": {
               "raw": "http://localhost:3000/api/registro-emocional/rachas",
               "protocol": "http",
-              "host": ["localhost"],
+              "host": [
+                "localhost"
+              ],
               "port": "3000",
-              "path": ["api", "registro-emocional", "rachas"]
+              "path": [
+                "api",
+                "registro-emocional",
+                "rachas"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "PASO 7 - GET Estadísticas",
           "request": {
             "method": "GET",
             "header": [
-              {"key": "Authorization", "value": "Bearer {{token-usuario}}"}
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token-usuario}}"
+              }
             ],
             "url": {
               "raw": "http://localhost:3000/api/registro-emocional/estadisticas?dias_atras=30",
               "protocol": "http",
-              "host": ["localhost"],
+              "host": [
+                "localhost"
+              ],
               "port": "3000",
-              "path": ["api", "registro-emocional", "estadisticas"],
+              "path": [
+                "api",
+                "registro-emocional",
+                "estadisticas"
+              ],
               "query": [
-                {"key": "dias_atras", "value": "30"}
+                {
+                  "key": "dias_atras",
+                  "value": "30"
+                }
               ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "PASO 8 - GET Resumen Día",
           "request": {
             "method": "GET",
             "header": [
-              {"key": "Authorization", "value": "Bearer {{token-usuario}}"}
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token-usuario}}"
+              }
             ],
             "url": {
               "raw": "http://localhost:3000/api/registro-emocional/resumen-dia/2026-03-17",
               "protocol": "http",
-              "host": ["localhost"],
+              "host": [
+                "localhost"
+              ],
               "port": "3000",
-              "path": ["api", "registro-emocional", "resumen-dia", "2026-03-17"]
+              "path": [
+                "api",
+                "registro-emocional",
+                "resumen-dia",
+                "2026-03-17"
+              ]
             }
-          }
+          },
+          "response": []
         }
       ]
     },
@@ -345,8 +479,14 @@
           "request": {
             "method": "POST",
             "header": [
-              {"key": "Authorization", "value": "Bearer {{token-usuario}}"},
-              {"key": "Content-Type", "value": "application/json"}
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token-usuario}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -355,11 +495,17 @@
             "url": {
               "raw": "http://localhost:3000/api/chats",
               "protocol": "http",
-              "host": ["localhost"],
+              "host": [
+                "localhost"
+              ],
               "port": "3000",
-              "path": ["api", "chats"]
+              "path": [
+                "api",
+                "chats"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "PASO 10 - POST Chat Simple IA",
@@ -371,15 +517,22 @@
                   "if (pm.response.code === 201) {",
                   "    console.log('✅ Respuesta IA recibida');",
                   "}"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
           "request": {
             "method": "POST",
             "header": [
-              {"key": "Authorization", "value": "Bearer {{token-usuario}}"},
-              {"key": "Content-Type", "value": "application/json"}
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token-usuario}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -388,35 +541,59 @@
             "url": {
               "raw": "http://localhost:3000/api/chats/ia",
               "protocol": "http",
-              "host": ["localhost"],
+              "host": [
+                "localhost"
+              ],
               "port": "3000",
-              "path": ["api", "chats", "ia"]
+              "path": [
+                "api",
+                "chats",
+                "ia"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "PASO 11 - GET Historial Chat IA",
           "request": {
             "method": "GET",
             "header": [
-              {"key": "Authorization", "value": "Bearer {{token-usuario}}"}
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token-usuario}}"
+              }
             ],
             "url": {
               "raw": "http://localhost:3000/api/chats/ia/historial",
               "protocol": "http",
-              "host": ["localhost"],
+              "host": [
+                "localhost"
+              ],
               "port": "3000",
-              "path": ["api", "chats", "ia", "historial"]
+              "path": [
+                "api",
+                "chats",
+                "ia",
+                "historial"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "PASO 12 - POST Chat Avanzado IA",
           "request": {
             "method": "POST",
             "header": [
-              {"key": "Authorization", "value": "Bearer {{token-usuario}}"},
-              {"key": "Content-Type", "value": "application/json"}
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token-usuario}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -425,43 +602,72 @@
             "url": {
               "raw": "http://localhost:3000/api/chats/ia/avanzado",
               "protocol": "http",
-              "host": ["localhost"],
+              "host": [
+                "localhost"
+              ],
               "port": "3000",
-              "path": ["api", "chats", "ia", "avanzado"]
+              "path": [
+                "api",
+                "chats",
+                "ia",
+                "avanzado"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "PASO 13 - GET Actividades Recomendadas",
           "request": {
             "method": "GET",
             "header": [
-              {"key": "Authorization", "value": "Bearer {{token-usuario}}"}
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token-usuario}}"
+              }
             ],
             "url": {
               "raw": "http://localhost:3000/api/chats/actividades/recomendadas",
               "protocol": "http",
-              "host": ["localhost"],
+              "host": [
+                "localhost"
+              ],
               "port": "3000",
-              "path": ["api", "chats", "actividades", "recomendadas"]
+              "path": [
+                "api",
+                "chats",
+                "actividades",
+                "recomendadas"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "PASO 14 - GET Estado Psicológico",
           "request": {
             "method": "GET",
             "header": [
-              {"key": "Authorization", "value": "Bearer {{token-usuario}}"}
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token-usuario}}"
+              }
             ],
             "url": {
               "raw": "http://localhost:3000/api/chats/estado-psicologico",
               "protocol": "http",
-              "host": ["localhost"],
+              "host": [
+                "localhost"
+              ],
               "port": "3000",
-              "path": ["api", "chats", "estado-psicologico"]
+              "path": [
+                "api",
+                "chats",
+                "estado-psicologico"
+              ]
             }
-          }
+          },
+          "response": []
         }
       ]
     },
@@ -473,196 +679,2067 @@
           "request": {
             "method": "POST",
             "header": [
-              {"key": "Authorization", "value": "Bearer {{token-usuario}}"},
-              {"key": "Content-Type", "value": "application/json"}
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token-usuario}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"titulo\": \"Un día difícil\",\n  \"contenido\": \"Hoy tuve mucho estrés en el trabajo...\",\n  \"fecha\": \"2026-08-13T00:00:00.000Z\"\n}",
-              "options": {"raw": {"language": "json"}}
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "http://localhost:3000/api/diario",
               "protocol": "http",
-              "host": ["localhost"],
+              "host": [
+                "localhost"
+              ],
               "port": "3000",
-              "path": ["api", "diario"]
+              "path": [
+                "api",
+                "diario"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Diario - Escenario 2 (Contenido vacío - 400)",
           "request": {
             "method": "POST",
             "header": [
-              {"key": "Authorization", "value": "Bearer {{token-usuario}}"},
-              {"key": "Content-Type", "value": "application/json"}
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token-usuario}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"titulo\": \"Un día difícil\",\n  \"contenido\": \"\",\n  \"fecha\": \"2026-08-13T00:00:00.000Z\"\n}",
-              "options": {"raw": {"language": "json"}}
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "http://localhost:3000/api/diario",
               "protocol": "http",
-              "host": ["localhost"],
+              "host": [
+                "localhost"
+              ],
               "port": "3000",
-              "path": ["api", "diario"]
+              "path": [
+                "api",
+                "diario"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Diario - Escenario 3 (Sin Token - 401)",
           "request": {
             "method": "POST",
             "header": [
-              {"key": "Content-Type", "value": "application/json"}
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"titulo\": \"Un día difícil\",\n  \"contenido\": \"Texto de prueba\"\n}",
-              "options": {"raw": {"language": "json"}}
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "http://localhost:3000/api/diario",
               "protocol": "http",
-              "host": ["localhost"],
+              "host": [
+                "localhost"
+              ],
               "port": "3000",
-              "path": ["api", "diario"]
+              "path": [
+                "api",
+                "diario"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Registro Emocional - Escenario 1 (Exitoso 201)",
           "request": {
             "method": "POST",
             "header": [
-              {"key": "Authorization", "value": "Bearer {{token-usuario}}"},
-              {"key": "Content-Type", "value": "application/json"}
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token-usuario}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"usuario_id\": {{usuarioId}},\n  \"respuestas\": [\n    {\"pregunta_id\": 1, \"opcion_id\": 2}\n  ]\n}",
-              "options": {"raw": {"language": "json"}}
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "http://localhost:3000/api/registro-emocional",
               "protocol": "http",
-              "host": ["localhost"],
+              "host": [
+                "localhost"
+              ],
               "port": "3000",
-              "path": ["api", "registro-emocional"]
+              "path": [
+                "api",
+                "registro-emocional"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Registro Emocional - Escenario 2 (Cuerpo sin respuestas - 400)",
           "request": {
             "method": "POST",
             "header": [
-              {"key": "Authorization", "value": "Bearer {{token-usuario}}"},
-              {"key": "Content-Type", "value": "application/json"}
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token-usuario}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"usuario_id\": {{usuarioId}},\n  \"respuestas\": []\n}",
-              "options": {"raw": {"language": "json"}}
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "http://localhost:3000/api/registro-emocional",
               "protocol": "http",
-              "host": ["localhost"],
+              "host": [
+                "localhost"
+              ],
               "port": "3000",
-              "path": ["api", "registro-emocional"]
+              "path": [
+                "api",
+                "registro-emocional"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Registro Emocional - Escenario 3 (Usuario no coincide / Prohibido - 403)",
           "request": {
             "method": "POST",
             "header": [
-              {"key": "Authorization", "value": "Bearer {{token-usuario}}"},
-              {"key": "Content-Type", "value": "application/json"}
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token-usuario}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"usuario_id\": 99999,\n  \"respuestas\": [\n    {\"pregunta_id\": 1, \"opcion_id\": 2}\n  ]\n}",
-              "options": {"raw": {"language": "json"}}
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "http://localhost:3000/api/registro-emocional",
               "protocol": "http",
-              "host": ["localhost"],
+              "host": [
+                "localhost"
+              ],
               "port": "3000",
-              "path": ["api", "registro-emocional"]
+              "path": [
+                "api",
+                "registro-emocional"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Chat IA - Escenario 1 (Exitoso 201)",
           "request": {
             "method": "POST",
             "header": [
-              {"key": "Authorization", "value": "Bearer {{token-usuario}}"},
-              {"key": "Content-Type", "value": "application/json"}
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token-usuario}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"mensaje\": \"Hoy me he sentido un poco triste\"\n}",
-              "options": {"raw": {"language": "json"}}
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "http://localhost:3000/api/chats/ia",
               "protocol": "http",
-              "host": ["localhost"],
+              "host": [
+                "localhost"
+              ],
               "port": "3000",
-              "path": ["api", "chats", "ia"]
+              "path": [
+                "api",
+                "chats",
+                "ia"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Chat IA - Escenario 2 (Mensaje vacío - 400)",
           "request": {
             "method": "POST",
             "header": [
-              {"key": "Authorization", "value": "Bearer {{token-usuario}}"},
-              {"key": "Content-Type", "value": "application/json"}
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token-usuario}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"mensaje\": \"\"\n}",
-              "options": {"raw": {"language": "json"}}
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "http://localhost:3000/api/chats/ia",
               "protocol": "http",
-              "host": ["localhost"],
+              "host": [
+                "localhost"
+              ],
               "port": "3000",
-              "path": ["api", "chats", "ia"]
+              "path": [
+                "api",
+                "chats",
+                "ia"
+              ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Chat IA - Escenario 3 (Sin Token - 401)",
           "request": {
             "method": "POST",
             "header": [
-              {"key": "Content-Type", "value": "application/json"}
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"mensaje\": \"Hola\"\n}",
-              "options": {"raw": {"language": "json"}}
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "http://localhost:3000/api/chats/ia",
               "protocol": "http",
-              "host": ["localhost"],
+              "host": [
+                "localhost"
+              ],
               "port": "3000",
-              "path": ["api", "chats", "ia"]
+              "path": [
+                "api",
+                "chats",
+                "ia"
+              ]
             }
-          }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Panel Psicologo",
+      "item": [
+        {
+          "name": "Registro Usuario 2 (Aislamiento)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "pm.test('Registro exitoso (201)', function () { pm.response.to.have.status(201); });",
+                  "if (jsonData.token) {",
+                  "    pm.collectionVariables.set('token-usuario2', jsonData.token);",
+                  "    pm.collectionVariables.set('usuarioId2', jsonData.user?.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombres\": \"Aislamiento\",\n  \"apellidos\": \"Test\",\n  \"correo\": \"aislamiento2@test.com\",\n  \"contrasena\": \"12345678\",\n  \"telefono\": \"2222222\",\n  \"ciudad\": \"UniLibre\",\n  \"edad\": 21\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/auth/register",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET Directorio Psicologos",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code es 200\", function () {\r\n    pm.response.to.have.status(200);\r\n});\r\n\r\npm.test(\"La respuesta es un array\", function () {\r\n    const jsonData = pm.response.json();\r\n    pm.expect(jsonData).to.be.an('array');\r\n});\r\n\r\npm.test(\"Ningun psicologo expone correo o telefono\", function () {\r\n    const jsonData = pm.response.json();\r\n    jsonData.forEach(function (psicologo) {\r\n        pm.expect(psicologo).to.not.have.property('correo');\r\n        pm.expect(psicologo).to.not.have.property('telefono');\r\n    });\r\n});\r\n\r\npm.test(\"Cada psicologo tiene los campos publicos esperados\", function () {\r\n    const jsonData = pm.response.json();\r\n    jsonData.forEach(function (psicologo) {\r\n        pm.expect(psicologo).to.have.property('id');\r\n        pm.expect(psicologo).to.have.property('nombres');\r\n        pm.expect(psicologo).to.have.property('apellidos');\r\n    });\r\n});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token-usuario}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/psicologos",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "psicologos"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "GET Directorio Psicologos",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "http://localhost:3000/api/psicologos",
+                  "protocol": "http",
+                  "host": [
+                    "localhost"
+                  ],
+                  "port": "3000",
+                  "path": [
+                    "api",
+                    "psicologos"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "x-powered-by",
+                  "value": "Express"
+                },
+                {
+                  "key": "access-control-allow-origin",
+                  "value": "*"
+                },
+                {
+                  "key": "content-type",
+                  "value": "application/json; charset=utf-8"
+                },
+                {
+                  "key": "content-length",
+                  "value": "119"
+                },
+                {
+                  "key": "etag",
+                  "value": "W/\"77-GVwMN3Ue/QcZLC1TWTxK9963ldU\""
+                },
+                {
+                  "key": "date",
+                  "value": "Sun, 13 Sep 2026 19:25:14 GMT"
+                },
+                {
+                  "key": "connection",
+                  "value": "keep-alive"
+                },
+                {
+                  "key": "keep-alive",
+                  "value": "timeout=5"
+                }
+              ],
+              "cookie": [],
+              "body": "[\n  {\n    \"id\": 2,\n    \"nombres\": \"Psicólogo\",\n    \"apellidos\": \"Prueba\",\n    \"especialidad_psicologo\": null,\n    \"ciudad\": \"Medellín\",\n    \"idioma\": null\n  }\n]"
+            }
+          ]
+        },
+        {
+          "name": "GET Directorio Psicologos - Rechazo Psicologo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Psicologo recibe 403 al intentar acceder al directorio\", function () {\r\n    pm.response.to.have.status(403);\r\n});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token-psicologo}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/psicologos",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "psicologos"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST Solicitar Asignacion - Exitosa",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Solicitud creada exitosamente (201)\", function () {\r\n    pm.response.to.have.status(201);\r\n});\r\n\r\npm.test(\"La respuesta incluye el estado pendiente\", function () {\r\n    const jsonData = pm.response.json();\r\n    pm.expect(jsonData.data.estado).to.eql(\"pendiente\");\r\n});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token-usuario}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n  \"psicologo_id\": 2,\r\n  \"mensaje\": \"Necesito apoyo psicológico\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/asignaciones/solicitar",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "asignaciones",
+                "solicitar"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "POST Solicitar Asignacion - Exitosa",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\r\n  \"psicologo_id\": 2,\r\n  \"mensaje\": \"Necesito apoyo psicológico\"\r\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "http://localhost:3000/api/asignaciones/solicitar",
+                  "protocol": "http",
+                  "host": [
+                    "localhost"
+                  ],
+                  "port": "3000",
+                  "path": [
+                    "api",
+                    "asignaciones",
+                    "solicitar"
+                  ]
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "x-powered-by",
+                  "value": "Express"
+                },
+                {
+                  "key": "access-control-allow-origin",
+                  "value": "*"
+                },
+                {
+                  "key": "content-type",
+                  "value": "application/json; charset=utf-8"
+                },
+                {
+                  "key": "content-length",
+                  "value": "368"
+                },
+                {
+                  "key": "etag",
+                  "value": "W/\"170-64VLcaVqqVYJmu3GgiHW6Op9++E\""
+                },
+                {
+                  "key": "date",
+                  "value": "Sun, 13 Sep 2026 19:26:16 GMT"
+                },
+                {
+                  "key": "connection",
+                  "value": "keep-alive"
+                },
+                {
+                  "key": "keep-alive",
+                  "value": "timeout=5"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Solicitud enviada correctamente\",\n  \"data\": {\n    \"id\": 2,\n    \"estudiante_id\": 3,\n    \"psicologo_id\": 2,\n    \"estado\": \"pendiente\",\n    \"mensaje\": \"Necesito apoyo psicológico\",\n    \"solicitado_en\": \"2026-09-13T19:26:16.661Z\",\n    \"procesado_en\": null,\n    \"finalizado_en\": null,\n    \"created_at\": \"2026-09-13T19:26:16.661Z\",\n    \"updated_at\": \"2026-09-13T19:26:16.661Z\",\n    \"deleted_at\": null\n  },\n  \"errors\": null\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST Solicitar Asignacion - Duplicidad",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Rechaza solicitud duplicada (400)\", function () {\r\n    pm.response.to.have.status(400);\r\n});\r\n\r\npm.test(\"Mensaje indica solicitud pendiente existente\", function () {\r\n    const jsonData = pm.response.json();\r\n    pm.expect(jsonData.message.toLowerCase()).to.include(\"pendiente\");\r\n});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token-usuario}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n  \"psicologo_id\": 2,\r\n  \"mensaje\": \"Necesito apoyo psicológico\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/asignaciones/solicitar",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "asignaciones",
+                "solicitar"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST Solicitar Asignacion - Autoasignacion",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Rechaza autoasignacion (400)\", function () {\r\n    pm.response.to.have.status(400);\r\n});\r\n\r\npm.test(\"Mensaje indica que no puede autoasignarse\", function () {\r\n    const jsonData = pm.response.json();\r\n    pm.expect(jsonData.message.toLowerCase()).to.include(\"mismo\");\r\n});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token-usuario}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n  \"psicologo_id\": 5,\r\n  \"mensaje\": \"Intento de autoasignacion\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/asignaciones/solicitar",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "asignaciones",
+                "solicitar"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST Solicitar Asignacion - Psicologo Inexistente",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Psicologo inexistente devuelve 404\", function () {\r\n    pm.response.to.have.status(404);\r\n});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token-usuario}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n  \"psicologo_id\": 99999,\r\n  \"mensaje\": \"Prueba psicologo inexistente\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/asignaciones/solicitar",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "asignaciones",
+                "solicitar"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST Solicitar Asignacion - Body Invalido",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Body invalido devuelve 400\", function () {\r\n    pm.response.to.have.status(400);\r\n});\r\n\r\npm.test(\"Mensaje indica datos invalidos\", function () {\r\n    const jsonData = pm.response.json();\r\n    pm.expect(jsonData.message.toLowerCase()).to.include(\"inv\");\r\n});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token-usuario}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n  \"mensaje\": \"Falta el psicologo_id\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/asignaciones/solicitar",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "asignaciones",
+                "solicitar"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST Solicitar Asignacion - Sin Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Sin token devuelve 401\", function () {\r\n    pm.response.to.have.status(401);\r\n});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n  \"psicologo_id\": 2,\r\n  \"mensaje\": \"Prueba sin token\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/asignaciones/solicitar",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "asignaciones",
+                "solicitar"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET Mis Solicitudes - Historial Propio",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Historial propio devuelve 200\", function () {\r\n    pm.response.to.have.status(200);\r\n});\r\n\r\npm.test(\"El historial contiene al menos una solicitud\", function () {\r\n    const jsonData = pm.response.json();\r\n    pm.expect(jsonData.data).to.be.an('array');\r\n    pm.expect(jsonData.data.length).to.be.above(0);\r\n});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token-usuario}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/asignaciones/mis-solicitudes",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "asignaciones",
+                "mis-solicitudes"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET Mis Solicitudes - Aislamiento Entre Estudiantes",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Historial de otro estudiante devuelve 200\", function () {\r\n    pm.response.to.have.status(200);\r\n});\r\n\r\npm.test(\"El historial esta vacio (no ve solicitudes ajenas)\", function () {\r\n    const jsonData = pm.response.json();\r\n    pm.expect(jsonData.data).to.be.an('array').that.is.empty;\r\n});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token-usuario2}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/asignaciones/mis-solicitudes",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "asignaciones",
+                "mis-solicitudes"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "DELETE Finalizar Asignacion",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/asignaciones/{{asignacionId}}",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "asignaciones",
+                "{{asignacionId}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token-usuario}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Asignacion finalizada (200)', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Estado pasa a finalizado', function () { pm.expect(pm.response.json().data.estado).to.eql('finalizado'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Ciclo - 1. Solicitar",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/asignaciones/solicitar",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "asignaciones",
+                "solicitar"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token-usuario}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"psicologo_id\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Solicitud creada (201)', function () { pm.response.to.have.status(201); });",
+                  "if (pm.response.code === 201) { pm.collectionVariables.set('cicloSolicitudId', pm.response.json().data.id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Ciclo - 2. Buzon Psicologo",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/asignaciones/psicologo/solicitudes",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "asignaciones",
+                "psicologo",
+                "solicitudes"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token-psicologo}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Buzon obtenido (200)', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PATCH Ciclo - 3. Aprobar",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/asignaciones/{{cicloSolicitudId}}/aprobar",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "asignaciones",
+                "{{cicloSolicitudId}}",
+                "aprobar"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token-psicologo}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Solicitud aprobada (200)', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Estado es aprobado', function () { pm.expect(pm.response.json().data.estado).to.eql('aprobado'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Solicitar Asignacion - Ya Tiene Aprobada",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Ya tiene asignacion aprobada devuelve 400\", function () {\r\n    pm.response.to.have.status(400);\r\n});\r\n\r\npm.test(\"Mensaje indica asignacion activa existente\", function () {\r\n    const jsonData = pm.response.json();\r\n    pm.expect(jsonData.message.toLowerCase()).to.include(\"activa\");\r\n});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token-usuario}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n  \"psicologo_id\": 2,\r\n  \"mensaje\": \"Prueba ya tiene asignacion aprobada\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://localhost:3000/api/asignaciones/solicitar",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "asignaciones",
+                "solicitar"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET Ciclo - 4. Mis Pacientes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/asignaciones/psicologo/mis-pacientes",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "asignaciones",
+                "psicologo",
+                "mis-pacientes"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token-psicologo}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Lista de pacientes (200)', function () { pm.response.to.have.status(200); });",
+                  "pm.test('El paciente recien aprobado aparece', function () { const ids = pm.response.json().data.map(a => a.estudiante_id); pm.expect(ids).to.include(Number(pm.collectionVariables.get('usuarioId'))); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Ciclo - 5. Solicitar (para rechazo)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/asignaciones/solicitar",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "asignaciones",
+                "solicitar"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token-usuario2}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"psicologo_id\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Solicitud creada (201)', function () { pm.response.to.have.status(201); });",
+                  "if (pm.response.code === 201) { pm.collectionVariables.set('cicloRechazoId', pm.response.json().data.id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PATCH Ciclo - 6. Rechazar",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/asignaciones/{{cicloRechazoId}}/rechazar",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "asignaciones",
+                "{{cicloRechazoId}}",
+                "rechazar"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token-psicologo}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Solicitud rechazada (200)', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Estado es rechazado', function () { pm.expect(pm.response.json().data.estado).to.eql('rechazado'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Ciclo - 7. Verificar No Aparece en Pacientes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/asignaciones/psicologo/mis-pacientes",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "asignaciones",
+                "psicologo",
+                "mis-pacientes"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token-psicologo}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Lista obtenida (200)', function () { pm.response.to.have.status(200); });",
+                  "pm.test('El estudiante rechazado NO aparece', function () { const ids = pm.response.json().data.map(a => a.estudiante_id); pm.expect(ids).to.not.include(Number(pm.collectionVariables.get('usuarioId2'))); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "New RequesPOST Checkpoint - Registrar Psicologo",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/auth/register",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"checkpoint.psi@test.com\",\n  \"contrasena\": \"12345678\",\n  \"nombres\": \"Checkpoint\",\n  \"apellidos\": \"Psicologo\",\n  \"telefono\": \"3000000099\",\n  \"ciudad\": \"Barranquilla\",\n  \"edad\": 30\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Usuario registrado (201)', function () { pm.response.to.have.status(201); });",
+                  "// Nota: promover manualmente id_rol=2 en BD para que actue como psicologo (no hay endpoint de auto-promocion)."
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Checkpoint - Directorio",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/psicologos",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "psicologos"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token-usuario}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Directorio (200)', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Checkpoint - Solicitar",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/asignaciones/solicitar",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "asignaciones",
+                "solicitar"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token-usuario}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"psicologo_id\": 2,\n  \"mensaje\": \"Checkpoint solicitud\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Solicitud (201 o 400 si ya existe)', function () { pm.expect([201,400]).to.include(pm.response.code); });",
+                  "if (pm.response.code === 201) { pm.collectionVariables.set('checkpointSolicitudId', pm.response.json().data.id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Checkpoint - Verificar Historial",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/asignaciones/mis-solicitudes",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "asignaciones",
+                "mis-solicitudes"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token-usuario}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Historial obtenido (200)', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Checkpoint - Buzon Psicologo",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/asignaciones/psicologo/solicitudes",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "asignaciones",
+                "psicologo",
+                "solicitudes"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token-psicologo}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Buzon obtenido (200)', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PATCH Checkpoint - Aprobar",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/asignaciones/{{checkpointSolicitudId}}/aprobar",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "asignaciones",
+                "{{checkpointSolicitudId}}",
+                "aprobar"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token-psicologo}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.collectionVariables.get('checkpointSolicitudId')) {",
+                  "    pm.test('Aprobado (200)', function () { pm.response.to.have.status(200); });",
+                  "} else {",
+                  "    pm.test('Sin solicitud nueva que aprobar (skip valido)', function () { pm.expect(true).to.be.true; });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Guard - Estudiante No Asignado (403)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/psicologo/pacientes/{{usuarioIdNoAsignado}}/perfil",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "psicologo",
+                "pacientes",
+                "{{usuarioIdNoAsignado}}",
+                "perfil"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token-psicologo}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Bloqueado sin asignacion activa (403)', function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Guard - Resumen No Asignado (403)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/psicologo/pacientes/{{usuarioIdNoAsignado}}/resumen",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "psicologo",
+                "pacientes",
+                "{{usuarioIdNoAsignado}}",
+                "resumen"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token-psicologo}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Bloqueado sin asignacion activa (403)', function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Guard - Chat No Asignado (403)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/psicologo/pacientes/{{usuarioIdNoAsignado}}/chat",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "psicologo",
+                "pacientes",
+                "{{usuarioIdNoAsignado}}",
+                "chat"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token-psicologo}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Bloqueado sin asignacion activa (403)', function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Auditoria - Perfil Estudiante",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/psicologo/pacientes/{{usuarioId}}/perfil",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "psicologo",
+                "pacientes",
+                "{{usuarioId}}",
+                "perfil"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token-psicologo}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Sin correo ni telefono', function () { const d = pm.response.json().data; pm.expect(d).to.not.have.property('correo'); pm.expect(d).to.not.have.property('telefono'); pm.expect(d).to.not.have.property('contrasena'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Auditoria - Resumen Estudiante",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/psicologo/pacientes/{{usuarioId}}/resumen",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "psicologo",
+                "pacientes",
+                "{{usuarioId}}",
+                "resumen"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token-psicologo}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Sin datos sensibles prohibidos', function () { const s = JSON.stringify(pm.response.json()); ['diario','feedback','falla_tecnica','solicitud_premio'].forEach(k => pm.expect(s.toLowerCase()).to.not.include(k)); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Auditoria - Registro Emocional",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/psicologo/pacientes/{{usuarioId}}/registro-emocional",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "psicologo",
+                "pacientes",
+                "{{usuarioId}}",
+                "registro-emocional"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token-psicologo}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Ordenado cronologicamente ascendente', function () { const items = pm.response.json().data; for (let i=1;i<items.length;i++){ pm.expect(new Date(items[i].fecha) >= new Date(items[i-1].fecha)).to.be.true; } });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Auditoria - Encuestas",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/psicologo/pacientes/{{usuarioId}}/encuestas",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "psicologo",
+                "pacientes",
+                "{{usuarioId}}",
+                "encuestas"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token-psicologo}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Auditoria - Chats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/psicologo/pacientes/{{usuarioId}}/chats",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "psicologo",
+                "pacientes",
+                "{{usuarioId}}",
+                "chats"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token-psicologo}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Cada chat expone solo mensajes propios de esta conversacion', function () { const data = pm.response.json().data; pm.expect(data).to.be.an('array'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "New Request",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3000/api/psicologo/pacientes/{{usuarioId}}/chat",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3000",
+              "path": [
+                "api",
+                "psicologo",
+                "pacientes",
+                "{{usuarioId}}",
+                "chat"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token-psicologo}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Chat abierto o reabierto (201 o 200)', function () { pm.expect([200,201]).to.include(pm.response.code); });"
+                ]
+              }
+            }
+          ]
         }
       ]
     }
@@ -670,28 +2747,51 @@
   "variable": [
     {
       "key": "token-usuario",
-      "value": "",
-      "type": "string"
+      "value": ""
     },
     {
       "key": "token-admin",
-      "value": "",
-      "type": "string"
+      "value": ""
     },
     {
       "key": "token-psicologo",
-      "value": "",
-      "type": "string"
+      "value": ""
     },
     {
       "key": "usuarioId",
-      "value": "3",
-      "type": "string"
+      "value": "3"
     },
     {
       "key": "chatId",
-      "value": "1",
-      "type": "string"
+      "value": "1"
+    },
+    {
+      "key": "token-usuario2",
+      "value": ""
+    },
+    {
+      "key": "usuarioId2",
+      "value": "5"
+    },
+    {
+      "key": "usuarioIdNoAsignado",
+      "value": "999999"
+    },
+    {
+      "key": "asignacionId",
+      "value": "1"
+    },
+    {
+      "key": "cicloSolicitudId",
+      "value": ""
+    },
+    {
+      "key": "cicloRechazoId",
+      "value": ""
+    },
+    {
+      "key": "checkpointSolicitudId",
+      "value": ""
     }
   ]
 }
