@@ -196,12 +196,12 @@ export const getPreguntasAdaptativasService = async (usuarioId?: number) => {
       }
       
       let peorCategoria = '';
-      let peorPromedio = -1;
+      let peorPromedio = Infinity;
       
       for (const [cat, data] of Object.entries(puntajesPorCategoria)) {
         const promedio = data.total / data.count;
-        // Asumiendo que mayor puntaje = peor estado emocional
-        if (promedio > peorPromedio) {
+        // Escala 0-4: menor puntaje = peor estado emocional
+        if (promedio < peorPromedio) {
           peorPromedio = promedio;
           peorCategoria = cat;
         }
