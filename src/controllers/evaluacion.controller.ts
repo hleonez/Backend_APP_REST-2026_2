@@ -11,11 +11,25 @@ const evaluacionSchema = z.object({
   respuestas: z.array(
     z.object({
       pregunta_id: z.number(),
-      respuesta: z.number().min(1).max(5),
+      respuesta: z.number().min(0).max(5),
     })
   ),
   observaciones: z.string().optional(),
 });
+
+/**
+ * La encuesta diaria (registro emocional) usa una escala Likert 0-4 donde
+ * 0 = "Muy mal" (peor) y 4 = "Excelente" (mejor), mientras la evaluación
+ * interna usa 1-5 donde 5 = mayor gravedad. Se invierte la escala para que
+ * el semáforo sea coherente: "Muy mal" -> 5 (rojo), "Excelente" -> 1 (verde).
+ * Valores fuera de 0-4 (escala clásica 1-5) se conservan sin cambios.
+ */
+const normalizarRespuestaLikert = (respuesta: number): number => {
+  if (respuesta >= 0 && respuesta <= 4) {
+    return 5 - respuesta;
+  }
+  return respuesta;
+};
 
 /**
  * Get all available questions for evaluations
@@ -56,8 +70,11 @@ export const crearEvaluacion = async (req: AuthRequest, res: Response): Promise<
     // Get questions for analysis
     const preguntas = await db.select().from(schema.preguntas);
 
-    // Ensure respuestas have the correct type
-    const respuestasTyped = respuestas as { pregunta_id: number; respuesta: number; }[];
+    // Ensure respuestas have the correct type (escala diaria 0-4 -> 1-5)
+    const respuestasTyped = respuestas.map((r) => ({
+      pregunta_id: r.pregunta_id,
+      respuesta: normalizarRespuestaLikert(r.respuesta),
+    }));
 
     let analisisResult;
 
