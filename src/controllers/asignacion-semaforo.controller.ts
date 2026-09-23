@@ -9,7 +9,9 @@ import {
   construirSubcategoriaPrincipal,
   determinarDimensionDominante,
   DIMENSION_GENERAL,
+  obtenerRecomendacionesPorEstado,
 } from '../shared/utils/semaforo-dimensiones.utils';
+
 
 const asignarSemaforoSchema = z.object({
   puntaje_manual: z.number().min(0).max(100).optional(),
@@ -161,19 +163,46 @@ export const asignarSemaforoUsuarioAutenticado = async (req: AuthRequest, res: R
       return { evaluacionActualizada: evaluacion, dimensionesPersistidas: dimensionesCalculadas };
     });
 
+    const recs = obtenerRecomendacionesPorEstado(estado, evaluacionActualizada.subcategoria_principal);
+
+    const evaluacionPayload = {
+      ...evaluacionActualizada,
+      estado: estado,
+      estado_semaforo: estado,
+      puntaje: puntajeFinal,
+      puntaje_total: puntajeFinal,
+      recomendaciones: recs,
+      sugerencias: recs,
+      dimensiones: dimensionesPersistidas,
+    };
+
     res.json({
       message: 'Semáforo asignado correctamente',
       data: {
         usuario_id: usuarioId,
+        estado: estado,
         estado_semaforo: estado,
+        puntaje: puntajeFinal,
         puntaje_total: puntajeFinal,
         subcategoria_principal: evaluacionActualizada.subcategoria_principal,
+        recomendaciones: recs,
+        sugerencias: recs,
         dimensiones: dimensionesPersistidas,
-        evaluacion: evaluacionActualizada,
+        evaluacion: evaluacionPayload,
       },
+      estado: estado,
+      estado_semaforo: estado,
+      puntaje: puntajeFinal,
+      puntaje_total: puntajeFinal,
+      subcategoria_principal: evaluacionActualizada.subcategoria_principal,
+      recomendaciones: recs,
+      sugerencias: recs,
+      dimensiones: dimensionesPersistidas,
+      evaluacion: evaluacionPayload,
     });
   } catch (error) {
     console.error('Error asignando semáforo:', error);
     res.status(500).json({ message: 'Error en el servidor' });
   }
 };
+

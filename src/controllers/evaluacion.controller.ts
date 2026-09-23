@@ -3,8 +3,10 @@ import { z } from 'zod';
 import { eq, desc, isNull, inArray, and } from 'drizzle-orm';
 import { AuthRequest } from '../middleware/auth.middleware';
 import { analizarRespuestasOllama, construirDimensionesEvaluacionClasica } from '../services/ollama.service';
+import { obtenerRecomendacionesPorEstado } from '../shared/utils/semaforo-dimensiones.utils';
 import { db } from '../db';
 import * as schema from '../db/schema';
+
 
 // Validation schema for evaluation responses
 const evaluacionSchema = z.object({
@@ -84,39 +86,36 @@ export const crearEvaluacion = async (req: AuthRequest, res: Response): Promise<
     } catch (aiError) {
       console.error('Error en análisis IA:', aiError);
       
-      // Algoritmo avanzado de semáforo para evitar filtraciones
       const rawScore = respuestasTyped.reduce((sum, resp) => {
         const pregunta = preguntas.find(p => p.id === resp.pregunta_id);
         return sum + (resp.respuesta * (pregunta?.peso || 1));
       }, 0);
 
-      // Calcular estadísticas adicionales
+      const totalPreguntas = respuestasTyped.length;
       let respuestasAltas = 0; // Contador de respuestas 4-5
       let respuestasBajas = 0; // Contador de respuestas 1-2
-      const totalPreguntas = respuestasTyped.length;
       
       respuestasTyped.forEach(resp => {
         if (resp.respuesta >= 4) respuestasAltas++;
         if (resp.respuesta <= 2) respuestasBajas++;
       });
       
-      const porcentajeAltas = (respuestasAltas / totalPreguntas) * 100;
-      const puntajePromedio = rawScore / totalPreguntas;
+      const minScore = totalPreguntas;
+      const maxScore = totalPreguntas * 5;
+      const puntajeNormalizado = totalPreguntas > 0
+        ? Math.round(Math.max(0, Math.min(100, ((rawScore - minScore) / (maxScore - minScore)) * 100)))
+        : 0;
+      const porcentajeAltas = totalPreguntas > 0 ? (respuestasAltas / totalPreguntas) * 100 : 0;
       
-      // Criterios más estrictos para evitar filtraciones
+      // Criterios de semáforo coherentes:
+      // Verde: 0-39 | Amarillo: 40-69 (ej. 'Normal' = 50) | Rojo: >= 70
       let estado: 'verde' | 'amarillo' | 'rojo' = 'verde';
       
-      if (rawScore > 50 && porcentajeAltas > 60) {
-        // Solo ROJO si puntaje alto Y más del 60% de respuestas son altas (4-5)
+      if (puntajeNormalizado >= 70 || porcentajeAltas >= 60) {
         estado = 'rojo';
-      } else if (rawScore > 35 || porcentajeAltas > 40) {
-        // AMARILLO si puntaje moderado O más del 40% de respuestas altas
-        estado = 'amarillo';
-      } else if (rawScore > 20 || porcentajeAltas > 25) {
-        // AMARILLO suave si hay indicadores moderados
+      } else if (puntajeNormalizado >= 40 || porcentajeAltas >= 30) {
         estado = 'amarillo';
       } else {
-        // VERDE por defecto
         estado = 'verde';
       }
 
@@ -130,8 +129,8 @@ export const crearEvaluacion = async (req: AuthRequest, res: Response): Promise<
 
       analisisResult = {
         estado,
-        puntaje: Math.min(rawScore * 2, 100),
-        observaciones: `Evaluación realizada con sistema de respaldo avanzado. Puntaje: ${rawScore}, Respuestas altas: ${porcentajeAltas.toFixed(1)}%`,
+        puntaje: puntajeNormalizado,
+        observaciones: `Evaluación realizada con sistema de respaldo seguro. Estado clasificado como ${estado}.`,
         recomendaciones: [
           'Mantén rutinas saludables de sueño y ejercicio',
           'Busca apoyo en familiares y amigos cercanos',
@@ -141,6 +140,7 @@ export const crearEvaluacion = async (req: AuthRequest, res: Response): Promise<
         subcategoria_principal,
       };
     }
+
 
     // Create evaluation in database (map to schema)
     const observacionesTexto = [
@@ -188,13 +188,39 @@ export const crearEvaluacion = async (req: AuthRequest, res: Response): Promise<
       return evaluacionCreada;
     });
 
+    const recs = analisisResult.recomendaciones && analisisResult.recomendaciones.length > 0
+      ? analisisResult.recomendaciones
+      : obtenerRecomendacionesPorEstado(analisisResult.estado, analisisResult.subcategoria_principal);
+
+    const evaluacionPayload = {
+      ...nuevaEvaluacion,
+      estado: nuevaEvaluacion.estado_semaforo,
+      estado_semaforo: nuevaEvaluacion.estado_semaforo,
+      puntaje: nuevaEvaluacion.puntaje_total,
+      puntaje_total: nuevaEvaluacion.puntaje_total,
+      recomendaciones: recs,
+      sugerencias: recs,
+      dimensiones: analisisResult.dimensiones,
+    };
+
     res.status(201).json({
       message: 'Evaluación creada exitosamente',
-      evaluacion: {
-        ...nuevaEvaluacion,
-        dimensiones: analisisResult.dimensiones,
+      evaluacion: evaluacionPayload,
+      analisis: {
+        ...analisisResult,
+        estado: analisisResult.estado,
+        estado_semaforo: analisisResult.estado,
+        recomendaciones: recs,
+        sugerencias: recs,
       },
-      analisis: analisisResult
+      estado: analisisResult.estado,
+      estado_semaforo: analisisResult.estado,
+      puntaje: analisisResult.puntaje,
+      puntaje_total: analisisResult.puntaje,
+      recomendaciones: recs,
+      sugerencias: recs,
+      dimensiones: analisisResult.dimensiones,
+      subcategoria_principal: analisisResult.subcategoria_principal,
     });
 
   } catch (error) {
@@ -225,10 +251,23 @@ export const getEvaluaciones = async (req: AuthRequest, res: Response): Promise<
     const evaluacionIds = evaluaciones.map((e) => e.id);
     const dimensionesPorEvaluacion = await obtenerDimensionesPorEvaluaciones(evaluacionIds);
 
-    const evaluacionesConDimensiones = evaluaciones.map((evaluacion) => ({
-      ...evaluacion,
-      dimensiones: dimensionesPorEvaluacion.get(evaluacion.id) ?? [],
-    }));
+    const evaluacionesConDimensiones = evaluaciones.map((evaluacion) => {
+      const recs = obtenerRecomendacionesPorEstado(
+        evaluacion.estado_semaforo,
+        evaluacion.subcategoria_principal,
+      );
+
+      return {
+        ...evaluacion,
+        estado: evaluacion.estado_semaforo,
+        estado_semaforo: evaluacion.estado_semaforo,
+        puntaje: evaluacion.puntaje_total,
+        puntaje_total: evaluacion.puntaje_total,
+        recomendaciones: recs,
+        sugerencias: recs,
+        dimensiones: dimensionesPorEvaluacion.get(evaluacion.id) ?? [],
+      };
+    });
 
     res.json(evaluacionesConDimensiones);
   } catch (error) {
@@ -275,14 +314,25 @@ export const getEvaluacion = async (req: AuthRequest, res: Response): Promise<vo
     // (`subcategoria_principal` ya viene incluido por ser columna propia
     // de `evaluaciones`).
     const dimensionesPorEvaluacion = await obtenerDimensionesPorEvaluaciones([evaluacion.id]);
+    const recs = obtenerRecomendacionesPorEstado(
+      evaluacion.estado_semaforo,
+      evaluacion.subcategoria_principal,
+    );
 
     res.json({
       ...evaluacion,
+      estado: evaluacion.estado_semaforo,
+      estado_semaforo: evaluacion.estado_semaforo,
+      puntaje: evaluacion.puntaje_total,
+      puntaje_total: evaluacion.puntaje_total,
+      recomendaciones: recs,
+      sugerencias: recs,
       dimensiones: dimensionesPorEvaluacion.get(evaluacion.id) ?? [],
     });
   } catch (error) {
     console.error('Error fetching evaluation:', error);
     res.status(500).json({ message: 'Error en el servidor' });
+
   }
 };
 
