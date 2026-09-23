@@ -2,6 +2,15 @@ import { and, asc, eq, inArray, isNull, desc, gte } from 'drizzle-orm';
 import { db } from '../db';
 import * as schema from '../db/schema';
 import { getTodayIso } from '../shared/utils/fechas.utils';
+import {
+  agruparPuntajesPorDimension,
+  construirSubcategoriaPrincipal,
+  determinarDimensionDominante,
+  calcularNivelPorPuntaje,
+  obtenerRecomendacionesPorEstado,
+  DIMENSION_GENERAL,
+} from '../shared/utils/semaforo-dimensiones.utils';
+
 
 type SaveRegistroEmocionalInput = {
   usuario_id: number;
@@ -341,22 +350,38 @@ export const getRespuestasUsuarioPorFechaService = async (usuarioId: number, fec
 export const saveRespuestasRegistroEmocionalService = async (input: SaveRegistroEmocionalInput) => {
   const todayIso = getTodayIso();
   const opcionIds = input.respuestas.map((item) => item.opcion_id);
+  const preguntaIds = input.respuestas.map((item) => item.pregunta_id);
 
-  const opciones = await db
-    .select({
-      id: schema.opciones_registro_emocional.id,
-      pregunta_id: schema.opciones_registro_emocional.pregunta_id,
-      puntaje: schema.opciones_registro_emocional.puntaje,
-    })
-    .from(schema.opciones_registro_emocional)
-    .where(
-      and(
-        inArray(schema.opciones_registro_emocional.id, opcionIds),
-        isNull(schema.opciones_registro_emocional.deleted_at),
+  const [opciones, preguntas] = await Promise.all([
+    db
+      .select({
+        id: schema.opciones_registro_emocional.id,
+        pregunta_id: schema.opciones_registro_emocional.pregunta_id,
+        puntaje: schema.opciones_registro_emocional.puntaje,
+      })
+      .from(schema.opciones_registro_emocional)
+      .where(
+        and(
+          inArray(schema.opciones_registro_emocional.id, opcionIds),
+          isNull(schema.opciones_registro_emocional.deleted_at),
+        ),
       ),
-    );
+    db
+      .select({
+        id: schema.preguntas_registro_emocional.id,
+        categoria: schema.preguntas_registro_emocional.categoria,
+      })
+      .from(schema.preguntas_registro_emocional)
+      .where(
+        and(
+          inArray(schema.preguntas_registro_emocional.id, preguntaIds),
+          isNull(schema.preguntas_registro_emocional.deleted_at),
+        ),
+      ),
+  ]);
 
   const opcionesById = new Map(opciones.map((item) => [item.id, item]));
+  const preguntasById = new Map(preguntas.map((p) => [p.id, p]));
 
   for (const respuesta of input.respuestas) {
     const opcion = opcionesById.get(respuesta.opcion_id);
@@ -371,25 +396,8 @@ export const saveRespuestasRegistroEmocionalService = async (input: SaveRegistro
     }
   }
 
+  // Guardar respuestas del día reemplazando cualquier intento previo de hoy sin error 409
   const inserted = await db.transaction(async (tx) => {
-    const [existing] = await tx
-      .select({ id: schema.registro_emocional.id })
-      .from(schema.registro_emocional)
-      .where(
-        and(
-          eq(schema.registro_emocional.usuario_id, input.usuario_id),
-          eq(schema.registro_emocional.fecha_dia, todayIso),
-          isNull(schema.registro_emocional.deleted_at),
-        ),
-      )
-      .limit(1);
-
-    if (existing) {
-      const error = new Error('Ya completaste el test emocional de hoy.');
-      (error as any).code = 'REGISTRO_DUPLICADO';
-      throw error;
-    }
-
     await tx
       .delete(schema.registro_emocional)
       .where(
@@ -415,6 +423,97 @@ export const saveRespuestasRegistroEmocionalService = async (input: SaveRegistro
   });
 
   const totalPuntaje = inserted.reduce((acc, item) => acc + (item.puntaje ?? 0), 0);
+  const promedioRegistro = inserted.length > 0 ? totalPuntaje / inserted.length : 2;
+
+  // Escala de registro emocional: 0 = "Muy mal" (100% gravedad), 4 = "Excelente" (0% gravedad)
+  // "Normal" (2) => 50% gravedad => Amarillo (40-69)
+  const puntajeGravedad = Math.round(
+    Math.max(0, Math.min(100, ((4 - promedioRegistro) / 4) * 100))
+  );
+
+  const estado = calcularNivelPorPuntaje(puntajeGravedad);
+
+  // Calcular detalle por dimensión
+  const itemsPorDimension = input.respuestas.map((r) => {
+    const opcion = opcionesById.get(r.opcion_id);
+    const pregunta = preguntasById.get(r.pregunta_id);
+    const dimension = pregunta?.categoria || DIMENSION_GENERAL;
+    const puntajeOpcion = opcion?.puntaje ?? 2;
+    const puntajeNormalizado = Math.max(0, Math.min(100, ((4 - puntajeOpcion) / 4) * 100));
+    return { dimension, puntaje: puntajeNormalizado };
+  });
+
+  const dimensionesCalculadas = agruparPuntajesPorDimension(itemsPorDimension);
+  const dimensionDominante = determinarDimensionDominante(dimensionesCalculadas);
+  const subcategoriaPrincipal = dimensionDominante
+    ? construirSubcategoriaPrincipal(estado, dimensionDominante.dimension)
+    : null;
+
+  const recs = obtenerRecomendacionesPorEstado(estado, subcategoriaPrincipal);
+
+  // Sincronizar tabla de evaluaciones y semaforo_dimensiones
+  const [ultimaEvaluacion] = await db
+    .select()
+    .from(schema.evaluaciones)
+    .where(eq(schema.evaluaciones.usuario_id, input.usuario_id))
+    .orderBy(desc(schema.evaluaciones.fecha))
+    .limit(1);
+
+  let evaluacionRow;
+  const observacionSemaforo = `Registro emocional diario: ${estado} (puntaje ${puntajeGravedad})`;
+
+  if (ultimaEvaluacion) {
+    [evaluacionRow] = await db
+      .update(schema.evaluaciones)
+      .set({
+        puntaje_total: puntajeGravedad,
+        estado_semaforo: estado,
+        observaciones: observacionSemaforo,
+        subcategoria_principal: subcategoriaPrincipal ?? ultimaEvaluacion.subcategoria_principal,
+        updated_at: new Date(),
+      })
+      .where(eq(schema.evaluaciones.id, ultimaEvaluacion.id))
+      .returning();
+  } else {
+    [evaluacionRow] = await db
+      .insert(schema.evaluaciones)
+      .values({
+        usuario_id: input.usuario_id,
+        puntaje_total: puntajeGravedad,
+        estado_semaforo: estado,
+        observaciones: observacionSemaforo,
+        subcategoria_principal: subcategoriaPrincipal,
+      })
+      .returning();
+  }
+
+  if (evaluacionRow && dimensionesCalculadas.length > 0) {
+    await db
+      .update(schema.semaforo_dimensiones)
+      .set({ deleted_at: new Date() })
+      .where(eq(schema.semaforo_dimensiones.evaluacion_id, evaluacionRow.id));
+
+    await db.insert(schema.semaforo_dimensiones).values(
+      dimensionesCalculadas.map((d) => ({
+        evaluacion_id: evaluacionRow.id,
+        dimension: d.dimension,
+        puntaje: d.puntaje,
+        nivel: d.nivel,
+      }))
+    );
+  }
+
+  const evaluacionPayload = {
+    ...evaluacionRow,
+    estado: estado,
+    estado_semaforo: estado,
+    puntaje: puntajeGravedad,
+    puntaje_total: puntajeGravedad,
+    subcategoria_principal: subcategoriaPrincipal,
+    dimensiones: dimensionesCalculadas,
+    recomendaciones: recs,
+    sugerencias: recs,
+  };
 
   return {
     usuario_id: input.usuario_id,
@@ -423,5 +522,16 @@ export const saveRespuestasRegistroEmocionalService = async (input: SaveRegistro
     total_puntaje: totalPuntaje,
     respuestas_guardadas: inserted.length,
     respuestas: inserted,
+    // Datos completos para la vista de resultados de Flutter
+    estado: estado,
+    estado_semaforo: estado,
+    puntaje: puntajeGravedad,
+    puntaje_total: puntajeGravedad,
+    subcategoria_principal: subcategoriaPrincipal,
+    dimensiones: dimensionesCalculadas,
+    recomendaciones: recs,
+    sugerencias: recs,
+    evaluacion: evaluacionPayload,
   };
 };
+
