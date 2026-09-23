@@ -550,27 +550,55 @@ export const analizarRespuestasOllama = async (
     const response = await queryOllama(prompt, systemPrompt);
     
     try {
-      // Intentar parsear la respuesta JSON
-      const cleanResponse = response.replace(/```json|```/g, '').trim();
-      const parsedResponse: MentalHealthResponse = JSON.parse(cleanResponse);
+      // Intentar parsear la respuesta JSON y limpiar cualquier formato markdown o caracteres extra
+      const cleanResponse = response
+        .replace(/```json/gi, '')
+        .replace(/```/g, '')
+        .trim();
       
-      // Validar que tenga los campos requeridos
-      if (!parsedResponse.estado || !parsedResponse.puntaje || !parsedResponse.observaciones || !parsedResponse.recomendaciones) {
-        throw new Error('Respuesta incompleta del modelo');
-      }
+      // Extraer bloque JSON si viene rodeado de texto
+      const jsonMatch = cleanResponse.match(/\{[\s\S]*\}/);
+      const jsonToParse = jsonMatch ? jsonMatch[0] : cleanResponse;
+      const parsedResponse: any = JSON.parse(jsonToParse);
+      
+      const rawEstado = String(parsedResponse.estado || '').toLowerCase().trim();
+      const estadoFinal: 'verde' | 'amarillo' | 'rojo' = 
+        rawEstado.includes('rojo') ? 'rojo' :
+        rawEstado.includes('amarillo') ? 'amarillo' :
+        rawEstado.includes('verde') ? 'verde' : fallbackState;
 
-      // Fase 5: el modelo solo determina el color/puntaje global. El detalle
-      // por dimensión y la subcategoría principal se calculan siempre de
-      // forma determinista, independientemente de la fuente del análisis.
+      const puntajeFinal = typeof parsedResponse.puntaje === 'number' 
+        ? Math.max(0, Math.min(100, parsedResponse.puntaje))
+        : Math.min(rawScore * 2, 100);
+
+      const recomendacionesFinal = Array.isArray(parsedResponse.recomendaciones) && parsedResponse.recomendaciones.length > 0
+        ? parsedResponse.recomendaciones.map((r: any) => String(r))
+        : [
+            'Dedica unos minutos al día para pausas activas y respiración profunda',
+            'Mantén contacto con tus personas de confianza para compartir cómo te sientes',
+            'Organiza tus metas diarias paso a paso para evitar la sobrecarga'
+          ];
+
+      const observacionesFinal = parsedResponse.observaciones 
+        ? String(parsedResponse.observaciones)
+        : `Evaluación completada. Estado general: ${estadoFinal}.`;
+
       const { dimensiones, subcategoria_principal } = construirDimensionesEvaluacionClasica(
         preguntas,
         respuestas,
-        parsedResponse.estado
+        estadoFinal
       );
 
-      return { ...parsedResponse, dimensiones, subcategoria_principal };
+      return {
+        estado: estadoFinal,
+        puntaje: puntajeFinal,
+        observaciones: observacionesFinal,
+        recomendaciones: recomendacionesFinal,
+        dimensiones,
+        subcategoria_principal,
+      };
     } catch (parseError) {
-      console.error('Error parseando respuesta de Ollama:', parseError);
+      console.error('Error parseando respuesta de Ollama, usando fallback estructurado:', parseError);
 
       const { dimensiones, subcategoria_principal } = construirDimensionesEvaluacionClasica(
         preguntas,
@@ -578,15 +606,14 @@ export const analizarRespuestasOllama = async (
         fallbackState
       );
 
-      // Fallback con datos calculados
       return {
         estado: fallbackState,
         puntaje: Math.min(rawScore * 2, 100),
-        observaciones: `Evaluación basada en ${respuestas.length} respuestas. Puntaje calculado: ${rawScore}`,
+        observaciones: `Evaluación basada en tus respuestas. Estado emocional clasificado como ${fallbackState}.`,
         recomendaciones: [
-          'Mantén rutinas saludables de sueño y ejercicio',
-          'Busca apoyo en familiares y amigos cercanos',
-          'Considera hablar con un profesional si persisten las molestias'
+          'Mantén rutinas saludables de sueño, hidratación y descanso',
+          'Conversa con un amigo, compañero o profesional de bienestar',
+          'Divide tus tareas en metas pequeñas para avanzar con calma'
         ],
         dimensiones,
         subcategoria_principal,
@@ -601,7 +628,6 @@ export const analizarRespuestasOllama = async (
       return sum + (resp.respuesta * (pregunta?.peso || 1));
     }, 0);
 
-    // Calcular estadísticas para fallback
     let respuestasAltas = 0;
     const totalPreguntas = respuestas.length;
     
@@ -611,7 +637,6 @@ export const analizarRespuestasOllama = async (
     
     const porcentajeAltas = (respuestasAltas / totalPreguntas) * 100;
     
-    // Aplicar criterios estrictos
     let estado: 'verde' | 'amarillo' | 'rojo' = 'verde';
     
     if (rawScore > 50 && porcentajeAltas > 60) {
@@ -633,11 +658,11 @@ export const analizarRespuestasOllama = async (
     return {
       estado,
       puntaje: Math.min(rawScore * 2, 100),
-      observaciones: `Evaluación realizada con sistema de respaldo avanzado. Puntaje: ${rawScore}, Respuestas altas: ${porcentajeAltas.toFixed(1)}%`,
+      observaciones: `Evaluación realizada con sistema de respaldo seguro. Estado: ${estado}.`,
       recomendaciones: [
         'Mantén rutinas saludables de sueño y ejercicio',
         'Busca apoyo en familiares y amigos cercanos',
-        'Considera hablar con un profesional si persisten las molestias'
+        'Considera hablar con un profesional de bienestar si persisten las molestias'
       ],
       dimensiones,
       subcategoria_principal,
