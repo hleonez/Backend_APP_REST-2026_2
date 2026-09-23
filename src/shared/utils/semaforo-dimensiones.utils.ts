@@ -160,3 +160,74 @@ export const construirSubcategoriaPrincipal = (
   colorGlobal: NivelSemaforo,
   dimensionDominante: string,
 ): string => `${colorGlobal}_${dimensionDominante}`;
+
+/**
+ * Retorna una lista de recomendaciones de bienestar pertinentes según el
+ * estado del semáforo y la subcategoría/dimensión principal identificada.
+ */
+export const obtenerRecomendacionesPorEstado = (
+  estado: string,
+  subcategoriaPrincipal?: string | null,
+): string[] => {
+  const normEstado = (estado || '').toLowerCase();
+  const subcat = (subcategoriaPrincipal || '').toLowerCase();
+
+  if (normEstado.includes('rojo')) {
+    if (subcat.includes('sueno') || subcat.includes('sueño')) {
+      return [
+        'Consulta con el equipo de bienestar universitario para evaluar tu higiene de sueño.',
+        'Desconecta dispositivos electrónicos al menos 1 hora antes de irte a descansar.',
+        'Prioriza tu descanso físico y mental por encima de cargas académicas excesivas hoy.',
+      ];
+    }
+    if (subcat.includes('ansiedad') || subcat.includes('estres') || subcat.includes('estrés')) {
+      return [
+        'Considera agendar una sesión de orientación con el equipo de bienestar estudiantil.',
+        'Haz pausas frecuentes y practica técnicas de respiración profunda 4-7-8.',
+        'Comunícate con personas de confianza o familiares y comparte cómo te sientes.',
+      ];
+    }
+    return [
+      'Considera contactar al servicio de bienestar estudiantil o un profesional de la salud.',
+      'Tómate una pausa y prioriza tu bienestar emocional hoy.',
+      'Habla con un familiar o amigo cercano de confianza sobre lo que estás viviendo.',
+    ];
+  }
+
+  if (normEstado.includes('amarillo')) {
+    if (subcat.includes('sueno') || subcat.includes('sueño')) {
+      return [
+        'Mantén un horario regular para acostarte y levantarte todos los días.',
+        'Evita el consumo de cafeína o bebidas energéticas en la tarde y noche.',
+        'Dedica 15 minutos antes de dormir a una lectura relajante o música suave.',
+      ];
+    }
+    if (subcat.includes('estres') || subcat.includes('estrés')) {
+      return [
+        'Divide tus entregas y estudios en bloques cortos con pausas de 5 minutos.',
+        'Elabora una lista de prioridades para el día y enfócate en una tarea a la vez.',
+        'Conversa con Noa o con tus compañeros para desahogar la carga académica.',
+      ];
+    }
+    if (subcat.includes('ansiedad')) {
+      return [
+        'Realiza ejercicios de respiración diafragmática cuando notes tensión.',
+        'Toma pausas al aire libre o camina unos minutos para despejar la mente.',
+        'Recuerda que no tienes que resolver todo en un solo día.',
+      ];
+    }
+    return [
+      'Dedica unos minutos al día para pausas activas y respiración profunda.',
+      'Organiza tus metas diarias paso a paso para evitar la sobrecarga.',
+      'Mantén contacto con personas de confianza para compartir tu día.',
+    ];
+  }
+
+  // Verde por defecto
+  return [
+    'Continúa con tus buenos hábitos de descanso, ejercicio y recreación.',
+    'Dedica tiempo a tus pasatiempos favoritos y a compartir con tus amigos.',
+    'Reconoce tus logros y mantén una rutina equilibrada de estudio y bienestar.',
+  ];
+};
+
