@@ -513,6 +513,19 @@ export const saveRespuestasRegistroEmocionalService = async (input: SaveRegistro
     dimensiones: dimensionesCalculadas,
     recomendaciones: recs,
     sugerencias: recs,
+    observaciones: evaluacionRow?.observaciones ?? observacionSemaforo,
+  };
+
+  const analisisPayload = {
+    estado: estado,
+    estado_semaforo: estado,
+    puntaje: puntajeGravedad,
+    puntaje_total: puntajeGravedad,
+    observaciones: evaluacionRow?.observaciones ?? observacionSemaforo,
+    recomendaciones: recs,
+    sugerencias: recs,
+    dimensiones: dimensionesCalculadas,
+    subcategoria_principal: subcategoriaPrincipal,
   };
 
   return {
@@ -522,7 +535,7 @@ export const saveRespuestasRegistroEmocionalService = async (input: SaveRegistro
     total_puntaje: totalPuntaje,
     respuestas_guardadas: inserted.length,
     respuestas: inserted,
-    // Datos completos para la vista de resultados de Flutter
+    // Estándar de semáforo para Flutter y clientes REST
     estado: estado,
     estado_semaforo: estado,
     puntaje: puntajeGravedad,
@@ -531,7 +544,9 @@ export const saveRespuestasRegistroEmocionalService = async (input: SaveRegistro
     dimensiones: dimensionesCalculadas,
     recomendaciones: recs,
     sugerencias: recs,
+    observaciones: evaluacionRow?.observaciones ?? observacionSemaforo,
     evaluacion: evaluacionPayload,
+    analisis: analisisPayload,
   };
 };
 
