@@ -166,7 +166,7 @@ export const construirSubcategoriaPrincipal = (
  * estado del semáforo y la subcategoría/dimensión principal identificada.
  */
 export const obtenerRecomendacionesPorEstado = (
-  estado: string,
+  estado?: string | null,
   subcategoriaPrincipal?: string | null,
 ): string[] => {
   const normEstado = (estado || '').toLowerCase();
