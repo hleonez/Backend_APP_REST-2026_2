@@ -10,7 +10,7 @@ services:
       - CORS_ORIGINS=${CORS_ORIGINS:?CORS_ORIGINS is required}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - OLLAMA_API_URL=http://ollama:11434
-      - OLLAMA_MODEL=qwen3:8b
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2:1.5b}
       - USE_OLLAMA=true
       - SENTIMENT_API_URL=${SENTIMENT_API_URL:-http://sentiment:8000}
       - PORT=3000
