@@ -313,18 +313,47 @@ export const eliminarAsignacionService = async (asignacionId: number, usuarioId:
   });
 };
 
-/**
+export interface PacienteResumen {
+  id: number;
+  estudiante_id: number;
+  nombres: string;
+  apellidos: string;
+  ultimo_semaforo: string | null;
+  fecha_ultima_actividad: string | null;
+}
 
+/**
  * Estudiantes actualmente activos (asignación 'aprobado') a cargo del psicólogo autenticado.
+ *
+ * Devuelve un resumen POR ESTUDIANTE con `id = estudiante_id` (el panel web usa ese id
+ * para navegar a /pacientes/:id y /chat/:id) junto con nombres y apellidos.
  */
-export const getMisPacientesService = async (psicologoId: number) => {
-  return db
-    .select()
+export const getMisPacientesService = async (psicologoId: number): Promise<PacienteResumen[]> => {
+  const rows = await db
+    .select({
+      estudiante_id: schema.asignaciones.estudiante_id,
+      nombres: schema.usuarios.nombres,
+      apellidos: schema.usuarios.apellidos,
+    })
     .from(schema.asignaciones)
+    .innerJoin(schema.usuarios, eq(schema.usuarios.id, schema.asignaciones.estudiante_id))
     .where(and(
       eq(schema.asignaciones.psicologo_id, psicologoId),
       eq(schema.asignaciones.estado, ASIGNACION_ESTADO.APROBADO),
       isNull(schema.asignaciones.deleted_at),
     ))
     .orderBy(desc(schema.asignaciones.procesado_en));
+
+  return rows.flatMap((row) =>
+    row.estudiante_id == null
+      ? []
+      : [{
+          id: row.estudiante_id,
+          estudiante_id: row.estudiante_id,
+          nombres: row.nombres,
+          apellidos: row.apellidos,
+          ultimo_semaforo: null,
+          fecha_ultima_actividad: null,
+        }]
+  );
 };
