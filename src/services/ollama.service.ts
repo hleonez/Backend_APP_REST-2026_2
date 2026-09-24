@@ -11,10 +11,11 @@ import {
 
 const OLLAMA_API_URL = process.env.OLLAMA_API_URL || 'http://localhost:11434';
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'qwen3:8b';
-const OLLAMA_KEEP_ALIVE = process.env.OLLAMA_KEEP_ALIVE || '30m';
-const OLLAMA_NUM_CTX = Number(process.env.OLLAMA_NUM_CTX) || 4096;
+const OLLAMA_FAST_MODEL = process.env.OLLAMA_FAST_MODEL || 'qwen2.5:1.5b';
+const OLLAMA_KEEP_ALIVE = process.env.OLLAMA_KEEP_ALIVE || '60m';
+const OLLAMA_NUM_CTX = Number(process.env.OLLAMA_NUM_CTX) || 2048;
 const OLLAMA_NUM_THREAD = Number(process.env.OLLAMA_NUM_THREAD) || 6;
-const OLLAMA_NUM_PREDICT = Number(process.env.OLLAMA_NUM_PREDICT) || 180;
+const OLLAMA_NUM_PREDICT = Number(process.env.OLLAMA_NUM_PREDICT) || 90;
 const OLLAMA_QUERY_TIMEOUT_MS = Number(process.env.OLLAMA_QUERY_TIMEOUT_MS) || 120000;
 const OLLAMA_PULL_TIMEOUT_MS = Number(process.env.OLLAMA_PULL_TIMEOUT_MS) || 1200000;
 
@@ -433,6 +434,101 @@ export const queryOllama = async (
     throw error;
   }
 };
+
+/**
+ * Genera de forma rápida con IA (modelo ligero 1.5B) la observación empática y 3 recomendaciones personalizadas
+ * a partir del cálculo matemático ya realizado por el backend.
+ */
+export const generarAnalisisEvaluacionRapido = async (params: {
+  estado: 'verde' | 'amarillo' | 'rojo';
+  puntaje: number;
+  subcategoriaPrincipal: string | null;
+  respuestasDetalle: Array<{ pregunta: string; respuesta: number }>;
+}): Promise<{ observaciones: string; recomendaciones: string[] }> => {
+  const { estado, puntaje, subcategoriaPrincipal, respuestasDetalle } = params;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 7000); // 7s timeout
+
+  const resumenRespuestas = respuestasDetalle
+    .slice(0, 5)
+    .map((r) => `- ${r.pregunta}: ${r.respuesta}/5`)
+    .join('\n');
+
+  const systemPrompt =
+    'Eres Noa, psicóloga empática universitaria. Genera un análisis breve y 3 recomendaciones prácticas. Responde ÚNICAMENTE en JSON válido sin formato markdown ni explicaciones: {"observaciones": "1 o 2 oraciones empáticas", "recomendaciones": ["consejo 1", "consejo 2", "consejo 3"]}';
+
+  const prompt = `Resultados de la evaluación:
+- Semáforo: ${estado.toUpperCase()} (Puntaje: ${puntaje}/100)
+- Enfoque: ${subcategoriaPrincipal || 'Bienestar general'}
+- Respuestas del usuario:
+${resumenRespuestas}
+
+Genera el JSON con la observación clínica empática y las 3 recomendaciones breves:`;
+
+  try {
+    const response = await fetch(`${OLLAMA_API_URL}/api/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: OLLAMA_FAST_MODEL,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: prompt },
+        ],
+        stream: false,
+        think: false,
+        keep_alive: OLLAMA_KEEP_ALIVE,
+        options: {
+          temperature: 0.6,
+          num_ctx: 1024,
+          num_thread: OLLAMA_NUM_THREAD,
+          num_predict: 100,
+        },
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      throw new Error(`Ollama API HTTP error: ${response.statusText}`);
+    }
+
+    const data = (await response.json()) as { message?: { content?: string } };
+    const raw = data.message?.content || '';
+
+    const cleanJson = raw
+      .replace(/```json/gi, '')
+      .replace(/```/g, '')
+      .trim();
+
+    const jsonMatch = cleanJson.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('No valid JSON in response');
+
+    const parsed = JSON.parse(jsonMatch[0]);
+
+    if (
+      parsed &&
+      typeof parsed.observaciones === 'string' &&
+      Array.isArray(parsed.recomendaciones) &&
+      parsed.recomendaciones.length > 0
+    ) {
+      return {
+        observaciones: parsed.observaciones.trim(),
+        recomendaciones: parsed.recomendaciones.slice(0, 3).map((r: any) => String(r).trim()),
+      };
+    }
+
+    throw new Error('Respuesta no coincide con el esquema esperado');
+  } catch (err) {
+    clearTimeout(timeout);
+    throw err;
+  }
+};
+
 
 /**
  * Fase 5: calcula el detalle por dimensión y la subcategoría principal para

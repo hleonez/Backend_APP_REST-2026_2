@@ -11,7 +11,12 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - OLLAMA_API_URL=http://ollama:11434
       - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen3:8b}
+      - OLLAMA_FAST_MODEL=${OLLAMA_FAST_MODEL:-qwen2.5:1.5b}
       - USE_OLLAMA=true
+      - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-60m}
+      - OLLAMA_NUM_THREAD=${OLLAMA_NUM_THREAD:-6}
+      - OLLAMA_NUM_PREDICT=${OLLAMA_NUM_PREDICT:-90}
+      - OLLAMA_NUM_CTX=${OLLAMA_NUM_CTX:-2048}
       - SENTIMENT_API_URL=${SENTIMENT_API_URL:-http://sentiment:8000}
       - PORT=3000
     depends_on:
