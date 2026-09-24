@@ -56,10 +56,12 @@ const corsOptions = {
   allowedHeaders: ['Content-Type', 'Authorization'],
 };
 
+app.set('etag', false);
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 app.use(morgan('dev'));
 app.use(express.json());
+
 
 // ============================================================
 // Health Check
