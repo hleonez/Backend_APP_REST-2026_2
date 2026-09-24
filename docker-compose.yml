@@ -55,6 +55,8 @@ services:
       - OLLAMA_NUM_THREAD=6
       - OLLAMA_KEEP_ALIVE=30m
       - OLLAMA_FLASH_ATTENTION=0
+      - OLLAMA_DEBUG=0
+      - OLLAMA_LOG_LEVEL=WARN
     restart: unless-stopped
     networks:
       - app-network
@@ -91,7 +93,7 @@ services:
         ATTEMPT=$$((ATTEMPT+1));
         sleep 5;
       done;
-      curl -s http://ollama:11434/api/tags | grep -q 'qwen3:8b' || curl -X POST http://ollama:11434/api/pull -H 'Content-Type: application/json' -d '{\"name\":\"qwen3:8b\"}' --no-buffer;
+      curl -s http://ollama:11434/api/tags | grep -q 'qwen3:8b' || curl -sS -X POST http://ollama:11434/api/pull -H 'Content-Type: application/json' -d '{\"name\":\"qwen3:8b\"}' -o /dev/null;
       echo 'Ollama ready';
       "
     networks:
