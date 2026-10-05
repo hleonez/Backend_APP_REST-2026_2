@@ -1,5 +1,6 @@
 import { Response } from "express";
 import { AuthRequest } from "../middleware/auth.middleware";
+import bcrypt from "bcrypt";
 
 import { db } from "../db";
 import * as schema from "../db/schema";
@@ -40,6 +41,68 @@ const sendReportSchema = z.object({
 const updatePreferencesSchema = z.object({
   idioma: z.enum(["es", "en", "pt", "fr", "de"])
 });
+
+// Esquema para cambiar la contraseña estando autenticado
+const changePasswordSchema = z
+  .object({
+    contrasenaActual: z.string().min(1, "Ingresa tu contraseña actual"),
+    nuevaContrasena: z
+      .string()
+      .min(8, "La contraseña debe tener al menos 8 caracteres"),
+    confirmarContrasena: z.string().min(8, "Confirma la nueva contraseña"),
+  })
+  .refine((data) => data.nuevaContrasena === data.confirmarContrasena, {
+    message: "Las contraseñas no coinciden",
+    path: ["confirmarContrasena"],
+  });
+
+// Cambiar la contraseña del usuario autenticado
+export const changePassword = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ message: "Usuario no autenticado" });
+      return;
+    }
+
+    const parsed = changePasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: "Datos inválidos", errors: parsed.error.errors });
+      return;
+    }
+
+    const { contrasenaActual, nuevaContrasena } = parsed.data;
+
+    const [existing] = await db
+      .select({ id: schema.usuarios.id, contrasena: schema.usuarios.contrasena })
+      .from(schema.usuarios)
+      .where(eq(schema.usuarios.id, userId))
+      .limit(1);
+
+    if (!existing) {
+      res.status(404).json({ message: "Usuario no encontrado" });
+      return;
+    }
+
+    const passwordMatch = await bcrypt.compare(contrasenaActual, existing.contrasena);
+    if (!passwordMatch) {
+      res.status(401).json({ message: "La contraseña actual es incorrecta" });
+      return;
+    }
+
+    const hashedPassword = await bcrypt.hash(nuevaContrasena, 10);
+
+    await db
+      .update(schema.usuarios)
+      .set({ contrasena: hashedPassword, updated_at: new Date() })
+      .where(eq(schema.usuarios.id, userId));
+
+    res.status(200).json({ message: "Contraseña actualizada exitosamente" });
+  } catch (error) {
+    console.error("Error changing password:", error);
+    res.status(500).json({ message: "Error en el servidor" });
+  }
+};
 
 // Obtener perfil del usuario
 export const getProfile = async (req: AuthRequest, res: Response): Promise<void> => {

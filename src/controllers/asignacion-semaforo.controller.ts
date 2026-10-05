@@ -9,7 +9,9 @@ import {
   construirSubcategoriaPrincipal,
   determinarDimensionDominante,
   DIMENSION_GENERAL,
+  obtenerRecomendacionesPorEstado,
 } from '../shared/utils/semaforo-dimensiones.utils';
+
 
 const asignarSemaforoSchema = z.object({
   puntaje_manual: z.number().min(0).max(100).optional(),
@@ -65,9 +67,11 @@ export const asignarSemaforoUsuarioAutenticado = async (req: AuthRequest, res: R
     const promedioRegistro = registrosEmocionales.length > 0
       ? registrosEmocionales.reduce((acc, item) => acc + item.puntaje, 0) / registrosEmocionales.length
       : null;
+    // Escala de registro emocional: 0 = "Muy mal" (peor), 4 = "Excelente"
+    // (mejor). Se normaliza a 0-100 como gravedad invertida (mayor = peor).
     const puntajeRegistroNormalizado = promedioRegistro === null
       ? null
-      : Math.max(0, Math.min(100, promedioRegistro * 20));
+      : Math.max(0, Math.min(100, ((4 - promedioRegistro) / 4) * 100));
 
     let puntajeFinal: number | null = null;
     if (puntajeEvaluacion !== null && puntajeRegistroNormalizado !== null) {
@@ -87,11 +91,12 @@ export const asignarSemaforoUsuarioAutenticado = async (req: AuthRequest, res: R
     const observacionSemaforo = `Asignación automática de semáforo: ${estado} (puntaje ${puntajeFinal})`;
 
     // Fase 5: puntaje y nivel por dimensión, calculados a partir del
-    // registro emocional (escala 0-4 -> normalizada a 0-100), y dimensión
-    // dominante (peor nivel) usada para construir la subcategoría principal.
+    // registro emocional (escala 0-4 -> normalizada a 0-100 como gravedad
+    // invertida: menor puntaje = peor estado), y dimensión dominante (peor
+    // nivel) usada para construir la subcategoría principal.
     const itemsPorDimension = registrosEmocionales.map((item) => ({
       dimension: item.categoria || DIMENSION_GENERAL,
-      puntaje: Math.max(0, Math.min(100, (item.puntaje / 4) * 100)),
+      puntaje: Math.max(0, Math.min(100, ((4 - item.puntaje) / 4) * 100)),
     }));
     const dimensionesCalculadas = agruparPuntajesPorDimension(itemsPorDimension);
     const dimensionDominante = determinarDimensionDominante(dimensionesCalculadas);
@@ -158,19 +163,46 @@ export const asignarSemaforoUsuarioAutenticado = async (req: AuthRequest, res: R
       return { evaluacionActualizada: evaluacion, dimensionesPersistidas: dimensionesCalculadas };
     });
 
+    const recs = obtenerRecomendacionesPorEstado(estado, evaluacionActualizada.subcategoria_principal);
+
+    const evaluacionPayload = {
+      ...evaluacionActualizada,
+      estado: estado,
+      estado_semaforo: estado,
+      puntaje: puntajeFinal,
+      puntaje_total: puntajeFinal,
+      recomendaciones: recs,
+      sugerencias: recs,
+      dimensiones: dimensionesPersistidas,
+    };
+
     res.json({
       message: 'Semáforo asignado correctamente',
       data: {
         usuario_id: usuarioId,
+        estado: estado,
         estado_semaforo: estado,
+        puntaje: puntajeFinal,
         puntaje_total: puntajeFinal,
         subcategoria_principal: evaluacionActualizada.subcategoria_principal,
+        recomendaciones: recs,
+        sugerencias: recs,
         dimensiones: dimensionesPersistidas,
-        evaluacion: evaluacionActualizada,
+        evaluacion: evaluacionPayload,
       },
+      estado: estado,
+      estado_semaforo: estado,
+      puntaje: puntajeFinal,
+      puntaje_total: puntajeFinal,
+      subcategoria_principal: evaluacionActualizada.subcategoria_principal,
+      recomendaciones: recs,
+      sugerencias: recs,
+      dimensiones: dimensionesPersistidas,
+      evaluacion: evaluacionPayload,
     });
   } catch (error) {
     console.error('Error asignando semáforo:', error);
     res.status(500).json({ message: 'Error en el servidor' });
   }
 };
+

@@ -22,83 +22,40 @@ interface ContextoPerfil {
  * MUCHO MÁS NATURAL y menos robótico que el anterior
  */
 export const construirPromptDinamico = (contexto?: ContextoPerfil, estiloId?: EstiloRespuestaId): string => {
-  const tieneHistorial = contexto?.tiene_historial;
   const emociones = contexto?.emociones_frecuentes || [];
   const temas = contexto?.temas_recurrentes || [];
+  const patrones = contexto?.patrones || [];
+  const tienePerfil =
+    Boolean(contexto?.tiene_historial) ||
+    emociones.length > 0 ||
+    temas.length > 0 ||
+    patrones.length > 0;
 
-  // Base principal: instrucciones en tono amistoso
-  let prompt = `Eres NOA, un amigo virtual genuino y empático que acompaña a estudiantes universitarios.
+  let prompt = `Eres NOA, un amigo virtual empático que acompaña a estudiantes universitarios.
+Conversacional, cálido y directo. Escucha primero, responde al punto y no des diagnósticos clínicos.
+No uses listas ni viñetas. No digas que eres IA. No empieces siempre con "Hola". No repitas la pregunta del usuario.`;
 
-CÓMO DEBES SONAR:
-- Conversacional, como amigos reales que se preocupan el uno por el otro
-- Empático pero no exagerado, genuino pero no perfecto
-- Inteligente sin sonar científico o teórico
-- Cercano sin ser invasivo ni presumido
-- Directo cuando es necesario, cálido siempre
-
-TUS PRINCIPIOS:
-1. Escucha PRIMERO - valida lo que siente, no lo que hace
-2. Responde al PUNTO - sin rodeos ni frases genéricas
-3. Ofrece ALGO CONCRETO - una acción, un pensamiento, una pregunta que importa
-4. Deja espacio - a veces una pregunta abierta es más poderosa que un consejo
-5. Aprende - recuerda lo que el usuario te ha compartido
-
-LO QUE NUNCA DEBES HACER:
-- Empezar SIEMPRE con "Hola" - varía el inicio
-- Repetir la pregunta del usuario
-- Parecer un chatbot (no digas "Como IA...", "lamentablemente...", "por supuesto que sí")
-- Usar listas con números ni viñetas
-- Responder con patrones predecibles
-- Dar diagnósticos clínicos
-- Parecer que tuviste una mala actualización`;
-
-  // Personalización basada en historial
-  if (tieneHistorial) {
+  if (tienePerfil) {
     prompt += `\n\nPERSONALIZACIÓN PARA ESTE USUARIO:`;
 
     if (emociones.length > 0) {
       prompt += `\n- Ha estado lidiando principalmente con: ${emociones.slice(0, 2).join(', ')}.`;
-      prompt += `\n- No repitas las mismas validaciones sobre esto. Mantén conversación fresca.`;
+      prompt += `\n- No repitas las mismas validaciones sobre esto.`;
     }
 
     if (temas.length > 0) {
-      prompt += `\n- Sus temas frecuentes: ${temas.join(', ')}.`;
-      prompt += `\n- Puedes hacer referencias a estos temas sin pedirle que explique desde cero.`;
+      prompt += `\n- Sus temas frecuentes: ${temas.join(', ')}. Puedes referirte a ellos sin pedir que empiece de cero.`;
+    }
+
+    if (patrones.length > 0) {
+      prompt += `\n- Patrones: ${patrones[0]}.`;
     }
 
     if (contexto?.dias_sin_comunicacion && contexto.dias_sin_comunicacion > 3) {
-      prompt += `\n- No habla contigo hace ${contexto.dias_sin_comunicacion} días.`;
-      prompt += `\n- Es buen momento para una conexión genuina, pregunta cómo ha estado.`;
+      prompt += `\n- No habla contigo hace ${contexto.dias_sin_comunicacion} días; pregunta cómo ha estado.`;
     }
-
-    prompt += `\n- Evita repetir respuestas que ya le diste en conversaciones anteriores.`;
   }
 
-  // Variaciones en respuestas
-  prompt += `\n\nVARIEDAD EN RESPUESTAS:
-En lugar de siempre validar + aconsejar + preguntar, varía así:
-- A veces: pregunta profunda primero
-- A veces: cuéntale un dato interesante o perspectiva diferente
-- A veces: comparte un pequeño tip o técnica con naturalidad
-- A veces: solo valida y espera su respuesta
-- A veces: haz una pregunta provocadora que le haga pensar
-
-TIPS Y DATOS CURIOSOS (úsalos cuando sea relevante, no en cada respuesta):
-- El 73% de estudiantes universitarios reportan estrés académico similar
-- La técnica 4-7-8 (inhala 4, retén 7, exhala 8) reduce ansiedad en minutos
-- El sueño afecta memoria y concentración más que cualquier otra cosa
-- Pequeñas acciones consistentes = cambios mayores a largo plazo
-- La autocompasión reduce ansiedad más que la autocrítica
-
-LARGO DE RESPUESTAS:
-- Normal: 50-120 palabras (conversacional)
-- Si es profundo: hasta 180 palabras, pero no más
-- Nunca paredes de texto
-- Si necesitas decir mucho, divídelo en párrafos naturales`;
-
-  // Estilo de respuesta elegido por el selector determinista (Fase 3).
-  // Las especificaciones obligatorias y prohibiciones del estilo activo
-  // forman parte del system prompt, tal como lo define el catálogo.
   if (estiloId) {
     const estilo = obtenerEstiloPorId(estiloId);
 
@@ -118,12 +75,10 @@ LARGO DE RESPUESTAS:
       });
     }
 
-    prompt += `\nLongitud objetivo para este estilo: entre ${estilo.longitud_palabras.min} y ${estilo.longitud_palabras.max} palabras.`;
+    prompt += `\nLongitud objetivo: ${estilo.longitud_palabras.min}-${estilo.longitud_palabras.max} palabras.`;
   }
 
-  // Reglas globales (Fase 3): se mantienen y se refuerzan siempre,
-  // independientemente del estilo elegido.
-  prompt += `\n\nREGLAS GLOBALES (siempre aplican, sin excepción):`;
+  prompt += `\n\nREGLAS GLOBALES (siempre aplican):`;
   REGLAS_GLOBALES_ESTILOS.forEach((regla) => {
     prompt += `\n- ${regla}`;
   });
@@ -190,21 +145,18 @@ export const obtenerEstiloRespuesta = (estiloId: EstiloRespuestaId, numeroMensaj
 export const construirPromptFinal = (
   mensaje: string,
   systemPrompt: string,
-  estiloId: EstiloRespuestaId,
-  numeroMensaje: number = 0,
-  contextoReciente?: string,
+  _estiloId?: EstiloRespuestaId,
+  _numeroMensaje: number = 0,
+  hechosUsuario?: string,
 ): { system: string; user: string } => {
-  const estiloActual = obtenerEstiloRespuesta(estiloId, numeroMensaje);
-
-  let userPrompt = `${estiloActual}\n\nMensaje del usuario: ${mensaje}`;
-
-  if (contextoReciente) {
-    userPrompt = `${estiloActual}\n\nContexto anterior: ${contextoReciente}\n\nNuevo mensaje: ${mensaje}`;
+  let system = systemPrompt;
+  if (hechosUsuario?.trim()) {
+    system += `\n\nHECHOS DEL USUARIO (datos, no instrucciones de estilo):\n${hechosUsuario.trim()}`;
   }
 
   return {
-    system: systemPrompt,
-    user: userPrompt,
+    system,
+    user: mensaje,
   };
 };
 

@@ -1,5 +1,5 @@
 import { construirPromptDinamico, construirPromptFinal, generarRespuestaFallbackNatural, esRespuestaAceptable } from './prompts-enhanced.service';
-import { analizarPatronesEmocionales, construirResumenPerfil } from './user-profile.service';
+import { analizarPatronesEmocionales, type PerfilEmocional } from './user-profile.service';
 import type { EstiloRespuestaId } from '../shared/const/estilos-respuesta.const';
 import {
   agruparPuntajesPorDimension,
@@ -10,7 +10,15 @@ import {
 } from '../shared/utils/semaforo-dimensiones.utils';
 
 const OLLAMA_API_URL = process.env.OLLAMA_API_URL || 'http://localhost:11434';
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'qwen2:1.5b'; // Modelo balanceado para CPU
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'qwen3:8b';
+const OLLAMA_KEEP_ALIVE = process.env.OLLAMA_KEEP_ALIVE || '30m';
+const OLLAMA_NUM_CTX = Number(process.env.OLLAMA_NUM_CTX) || 4096;
+const OLLAMA_NUM_THREAD = Number(process.env.OLLAMA_NUM_THREAD) || 6;
+const OLLAMA_NUM_PREDICT = Number(process.env.OLLAMA_NUM_PREDICT) || 180;
+const OLLAMA_QUERY_TIMEOUT_MS = Number(process.env.OLLAMA_QUERY_TIMEOUT_MS) || 120000;
+const OLLAMA_PULL_TIMEOUT_MS = Number(process.env.OLLAMA_PULL_TIMEOUT_MS) || 1200000;
+
+export type OllamaChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
 
 interface OllamaResponse {
   model: string;
@@ -307,7 +315,7 @@ export const checkOllamaHealth = async (): Promise<boolean> => {
  */
 export const downloadModel = async (): Promise<boolean> => {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 120000); // 2 minutos de timeout
+  const timeout = setTimeout(() => controller.abort(), OLLAMA_PULL_TIMEOUT_MS);
   try {
     console.log(`Descargando modelo ${OLLAMA_MODEL}...`);
     const response = await fetch(`${OLLAMA_API_URL}/api/pull`, {
@@ -352,7 +360,7 @@ export const downloadModel = async (): Promise<boolean> => {
   } catch (error: any) {
     clearTimeout(timeout);
     if (error.name === 'AbortError') {
-      console.error('Timeout: la descarga del modelo tardó más de 2 minutos');
+      console.error('Timeout: la descarga del modelo tardó más de lo permitido');
     } else {
       console.error('Error descargando modelo:', error);
     }
@@ -363,17 +371,26 @@ export const downloadModel = async (): Promise<boolean> => {
 /**
  * Consulta a Ollama con timeout de 60 segundos
  */
-export const queryOllama = async (prompt: string, systemPrompt?: string): Promise<string> => {
+export const queryOllama = async (
+  prompt: string,
+  systemPrompt?: string,
+  historial: OllamaChatMessage[] = [],
+): Promise<string> => {
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 60000); // 60 segundos de timeout
+    const timeout = setTimeout(() => controller.abort(), OLLAMA_QUERY_TIMEOUT_MS);
 
-    const messages = [];
-    
+    const messages: OllamaChatMessage[] = [];
+
     if (systemPrompt) {
       messages.push({ role: 'system', content: systemPrompt });
     }
-    
+
+    for (const turno of historial) {
+      if (turno.role === 'system') continue;
+      messages.push({ role: turno.role, content: turno.content });
+    }
+
     messages.push({ role: 'user', content: prompt });
 
     const response = await fetch(`${OLLAMA_API_URL}/api/chat`, {
@@ -385,11 +402,16 @@ export const queryOllama = async (prompt: string, systemPrompt?: string): Promis
         model: OLLAMA_MODEL,
         messages,
         stream: false,
+        think: false,
+        keep_alive: OLLAMA_KEEP_ALIVE,
         options: {
           temperature: 0.7,
           top_p: 0.95,
           top_k: 50,
-        }
+          num_ctx: OLLAMA_NUM_CTX,
+          num_thread: OLLAMA_NUM_THREAD,
+          num_predict: OLLAMA_NUM_PREDICT,
+        },
       }),
       signal: controller.signal
     });
@@ -404,7 +426,7 @@ export const queryOllama = async (prompt: string, systemPrompt?: string): Promis
     return data.message?.content || 'No se pudo generar respuesta';
   } catch (error: any) {
     if (error.name === 'AbortError') {
-      console.error('Timeout: Ollama tardó más de 60 segundos en responder');
+      console.error(`Timeout: Ollama tardó más de ${OLLAMA_QUERY_TIMEOUT_MS / 1000} segundos en responder`);
       throw new Error('Ollama no responde. Por favor, intenta nuevamente.');
     }
     console.error('Error consultando Ollama:', error);
@@ -449,22 +471,21 @@ export const analizarRespuestasOllama = async (
   respuestas: { pregunta_id: number; respuesta: number }[]
 ): Promise<MentalHealthResponse> => {
   try {
-    // Formatear datos para el modelo
     const preguntasRespuestas = respuestas.map(resp => {
       const pregunta = preguntas.find(p => p.id === resp.pregunta_id);
       return {
         pregunta: pregunta?.texto || 'Pregunta no encontrada',
         peso: pregunta?.peso || 1,
-        respuesta: resp.respuesta
+        respuesta: resp.respuesta,
       };
     });
-    
-    // Algoritmo avanzado de semáforo para evitar filtraciones
-    let rawScore = 0;
-    let respuestasAltas = 0; // Contador de respuestas 4-5
-    let respuestasBajas = 0; // Contador de respuestas 1-2
+
     const totalPreguntas = preguntasRespuestas.length;
-    
+    let rawScore = 0;
+    let respuestasAltas = 0; // 4-5
+    let respuestasBajas = 0; // 1-2
+
+
     preguntasRespuestas.forEach(item => {
       const puntajePonderado = item.respuesta * item.peso;
       rawScore += puntajePonderado;
@@ -473,50 +494,48 @@ export const analizarRespuestasOllama = async (
       if (item.respuesta <= 2) respuestasBajas++;
     });
     
-    const porcentajeAltas = (respuestasAltas / totalPreguntas) * 100;
-    const puntajePromedio = rawScore / totalPreguntas;
+    const minScore = totalPreguntas;
+    const maxScore = totalPreguntas * 5;
+    const puntajeBaseNormalizado = totalPreguntas > 0
+      ? Math.round(Math.max(0, Math.min(100, ((rawScore - minScore) / (maxScore - minScore)) * 100)))
+      : 0;
+    const porcentajeAltas = totalPreguntas > 0 ? (respuestasAltas / totalPreguntas) * 100 : 0;
     
-    // Criterios más estrictos para evitar filtraciones
+    // Criterios de semáforo coherentes con la escala normalizada 0-100:
+    // Verde: 0-39 | Amarillo: 40-69 (ej. 'Normal' = 50) | Rojo: >= 70
     let fallbackState: 'verde' | 'amarillo' | 'rojo' = 'verde';
     
-    if (rawScore > 50 && porcentajeAltas > 60) {
-      // Solo ROJO si puntaje alto Y más del 60% de respuestas son altas (4-5)
+    if (puntajeBaseNormalizado >= 70 || porcentajeAltas >= 60) {
       fallbackState = 'rojo';
-    } else if (rawScore > 35 || porcentajeAltas > 40) {
-      // AMARILLO si puntaje moderado O más del 40% de respuestas altas
-      fallbackState = 'amarillo';
-    } else if (rawScore > 20 || porcentajeAltas > 25) {
-      // AMARILLO suave si hay indicadores moderados
+    } else if (puntajeBaseNormalizado >= 40 || porcentajeAltas >= 30) {
       fallbackState = 'amarillo';
     } else {
-      // VERDE por defecto
       fallbackState = 'verde';
     }
 
     const systemPrompt = `Eres un psicólogo clínico experto especializado en evaluaciones de salud mental y bienestar emocional. Tu función es analizar respuestas de cuestionarios psicológicos y proporcionar evaluaciones precisas y profesionales. Debes responder ÚNICAMENTE en formato JSON válido, sin comentarios adicionales.`;
 
     const prompt = `
-    Analiza las siguientes respuestas de una evaluación de salud mental (escala 1-5, donde 5 indica mayor gravedad):
+    Analiza las siguientes respuestas de una evaluación de salud mental (escala 1-5, donde 1 = Excelente/Positivo, 3 = Normal/Intermedio, y 5 = Muy grave/Malestar alto):
     
     ${preguntasRespuestas.map(pr => 
       `- Pregunta: "${pr.pregunta}" (Peso: ${pr.peso})
        - Respuesta: ${pr.respuesta}/5`
     ).join('\n\n')}
     
-    CRITERIOS DE EVALUACIÓN:
-    - VERDE: Puntaje 0-30 - Estado emocional estable, bienestar general, sin signos de alerta significativos
-    - AMARILLO: Puntaje 31-60 - Alerta moderada, algunos síntomas de malestar emocional, requiere atención y seguimiento
-    - ROJO: Puntaje 61-100 - Alerta grave, múltiples síntomas de malestar emocional, requiere intervención profesional inmediata
+    CRITERIOS DE EVALUACIÓN DE SEMÁFORO:
+    - VERDE: Puntaje 0-39 - Estado emocional positivo, bienestar general, sin signos de alerta
+    - AMARILLO: Puntaje 40-69 - Estado neutro, regular o alerta moderada (respuestas intermedias 'Normal', cansancio leve o dudas cotidianas)
+    - ROJO: Puntaje 70-100 - Alerta alta o grave, múltiples síntomas marcados de malestar emocional
     
-    IMPORTANTE: Sé conservador en la evaluación. Solo asigna ROJO si hay evidencia clara de múltiples síntomas graves. 
-    Prefiere AMARILLO cuando haya dudas razonables.
+    IMPORTANTE: Si la persona responde predominantemente respuestas intermedias (como 'Normal' o 3/5), el estado correspondiente es AMARILLO (puntaje aproximado 45-55).
     
     Determina:
-    1. Un estado de semáforo basado en los criterios anteriores
+    1. Un estado de semáforo ("verde", "amarillo", "rojo") basado en los criterios anteriores
     2. Un puntaje numérico (0-100) que represente la gravedad general
     3. Una observación clínica profesional y empática sobre el estado mental
     4. Tres recomendaciones prácticas y específicas para el bienestar emocional
-    
+
     Responde SOLO en este formato JSON:
     {
       "estado": "verde/amarillo/rojo",
@@ -528,27 +547,55 @@ export const analizarRespuestasOllama = async (
     const response = await queryOllama(prompt, systemPrompt);
     
     try {
-      // Intentar parsear la respuesta JSON
-      const cleanResponse = response.replace(/```json|```/g, '').trim();
-      const parsedResponse: MentalHealthResponse = JSON.parse(cleanResponse);
+      // Intentar parsear la respuesta JSON y limpiar cualquier formato markdown o caracteres extra
+      const cleanResponse = response
+        .replace(/```json/gi, '')
+        .replace(/```/g, '')
+        .trim();
       
-      // Validar que tenga los campos requeridos
-      if (!parsedResponse.estado || !parsedResponse.puntaje || !parsedResponse.observaciones || !parsedResponse.recomendaciones) {
-        throw new Error('Respuesta incompleta del modelo');
-      }
+      // Extraer bloque JSON si viene rodeado de texto
+      const jsonMatch = cleanResponse.match(/\{[\s\S]*\}/);
+      const jsonToParse = jsonMatch ? jsonMatch[0] : cleanResponse;
+      const parsedResponse: any = JSON.parse(jsonToParse);
+      
+      const rawEstado = String(parsedResponse.estado || '').toLowerCase().trim();
+      const estadoFinal: 'verde' | 'amarillo' | 'rojo' = 
+        rawEstado.includes('rojo') ? 'rojo' :
+        rawEstado.includes('amarillo') ? 'amarillo' :
+        rawEstado.includes('verde') ? 'verde' : fallbackState;
 
-      // Fase 5: el modelo solo determina el color/puntaje global. El detalle
-      // por dimensión y la subcategoría principal se calculan siempre de
-      // forma determinista, independientemente de la fuente del análisis.
+      const puntajeFinal = typeof parsedResponse.puntaje === 'number' 
+        ? Math.max(0, Math.min(100, Math.round(parsedResponse.puntaje)))
+        : puntajeBaseNormalizado;
+
+      const recomendacionesFinal = Array.isArray(parsedResponse.recomendaciones) && parsedResponse.recomendaciones.length > 0
+        ? parsedResponse.recomendaciones.map((r: any) => String(r))
+        : [
+            'Dedica unos minutos al día para pausas activas y respiración profunda',
+            'Mantén contacto con tus personas de confianza para compartir cómo te sientes',
+            'Organiza tus metas diarias paso a paso para evitar la sobrecarga'
+          ];
+
+      const observacionesFinal = parsedResponse.observaciones 
+        ? String(parsedResponse.observaciones)
+        : `Evaluación completada. Estado general: ${estadoFinal}.`;
+
       const { dimensiones, subcategoria_principal } = construirDimensionesEvaluacionClasica(
         preguntas,
         respuestas,
-        parsedResponse.estado
+        estadoFinal
       );
 
-      return { ...parsedResponse, dimensiones, subcategoria_principal };
+      return {
+        estado: estadoFinal,
+        puntaje: puntajeFinal,
+        observaciones: observacionesFinal,
+        recomendaciones: recomendacionesFinal,
+        dimensiones,
+        subcategoria_principal,
+      };
     } catch (parseError) {
-      console.error('Error parseando respuesta de Ollama:', parseError);
+      console.error('Error parseando respuesta de Ollama, usando fallback estructurado:', parseError);
 
       const { dimensiones, subcategoria_principal } = construirDimensionesEvaluacionClasica(
         preguntas,
@@ -556,15 +603,14 @@ export const analizarRespuestasOllama = async (
         fallbackState
       );
 
-      // Fallback con datos calculados
       return {
         estado: fallbackState,
-        puntaje: Math.min(rawScore * 2, 100),
-        observaciones: `Evaluación basada en ${respuestas.length} respuestas. Puntaje calculado: ${rawScore}`,
+        puntaje: puntajeBaseNormalizado,
+        observaciones: `Evaluación basada en tus respuestas. Estado emocional clasificado como ${fallbackState}.`,
         recomendaciones: [
-          'Mantén rutinas saludables de sueño y ejercicio',
-          'Busca apoyo en familiares y amigos cercanos',
-          'Considera hablar con un profesional si persisten las molestias'
+          'Mantén rutinas saludables de sueño, hidratación y descanso',
+          'Conversa con un amigo, compañero o profesional de bienestar',
+          'Divide tus tareas en metas pequeñas para avanzar con calma'
         ],
         dimensiones,
         subcategoria_principal,
@@ -573,30 +619,28 @@ export const analizarRespuestasOllama = async (
   } catch (error) {
     console.error('Error en análisis con Ollama:', error);
     
-    // Fallback completo con algoritmo avanzado
+    const totalPreguntas = respuestas.length;
     const rawScore = respuestas.reduce((sum, resp) => {
       const pregunta = preguntas.find(p => p.id === resp.pregunta_id);
       return sum + (resp.respuesta * (pregunta?.peso || 1));
     }, 0);
 
-    // Calcular estadísticas para fallback
     let respuestasAltas = 0;
-    const totalPreguntas = respuestas.length;
-    
     respuestas.forEach(resp => {
       if (resp.respuesta >= 4) respuestasAltas++;
     });
     
-    const porcentajeAltas = (respuestasAltas / totalPreguntas) * 100;
+    const minScore = totalPreguntas;
+    const maxScore = totalPreguntas * 5;
+    const puntajeNormalizado = totalPreguntas > 0
+      ? Math.round(Math.max(0, Math.min(100, ((rawScore - minScore) / (maxScore - minScore)) * 100)))
+      : 0;
+    const porcentajeAltas = totalPreguntas > 0 ? (respuestasAltas / totalPreguntas) * 100 : 0;
     
-    // Aplicar criterios estrictos
     let estado: 'verde' | 'amarillo' | 'rojo' = 'verde';
-    
-    if (rawScore > 50 && porcentajeAltas > 60) {
+    if (puntajeNormalizado >= 70 || porcentajeAltas >= 60) {
       estado = 'rojo';
-    } else if (rawScore > 35 || porcentajeAltas > 40) {
-      estado = 'amarillo';
-    } else if (rawScore > 20 || porcentajeAltas > 25) {
+    } else if (puntajeNormalizado >= 40 || porcentajeAltas >= 30) {
       estado = 'amarillo';
     } else {
       estado = 'verde';
@@ -610,12 +654,12 @@ export const analizarRespuestasOllama = async (
 
     return {
       estado,
-      puntaje: Math.min(rawScore * 2, 100),
-      observaciones: `Evaluación realizada con sistema de respaldo avanzado. Puntaje: ${rawScore}, Respuestas altas: ${porcentajeAltas.toFixed(1)}%`,
+      puntaje: puntajeNormalizado,
+      observaciones: `Evaluación realizada con sistema de respaldo seguro. Estado: ${estado}.`,
       recomendaciones: [
         'Mantén rutinas saludables de sueño y ejercicio',
         'Busca apoyo en familiares y amigos cercanos',
-        'Considera hablar con un profesional si persisten las molestias'
+        'Considera hablar con un profesional de bienestar si persisten las molestias'
       ],
       dimensiones,
       subcategoria_principal,
@@ -623,9 +667,7 @@ export const analizarRespuestasOllama = async (
   }
 };
 
-/**
- * Chat general con IA usando Ollama
- */
+
 /**
  * Chat general con IA usando Ollama
  */
@@ -639,53 +681,64 @@ export const chatWithOllama = async (params: {
   numeroMensaje?: number;
   /**
    * Estilo de respuesta elegido por el selector determinista
-   * (`selector-estilo.service.ts`, Fase 3). Si no se provee (p. ej.
-   * `chatConIAAvanzado`, que aun no integra el selector), se usa
+   * (`selector-estilo.service.ts`, Fase 3). Si no se provee se usa
    * 'conversacion_neutral' como estilo por defecto seguro.
    */
   estilo?: EstiloRespuestaId;
+  /** Perfil ya cargado en el controlador; si llega, no se vuelve a consultar. */
+  perfil?: PerfilEmocional;
+  /** Últimos turnos del chat IA, sin el mensaje actual. */
+  historial?: OllamaChatMessage[];
 }): Promise<ChatResponse> => {
-  const { mensaje, contexto, modo, userId, numeroMensaje = 0, estilo = 'conversacion_neutral' } = params;
+  const {
+    mensaje,
+    contexto,
+    userId,
+    numeroMensaje = 0,
+    estilo = 'conversacion_neutral',
+    perfil: perfilParam,
+    historial = [],
+  } = params;
 
   try {
-    // Obtener perfil del usuario si disponible
-    let perfilContexto = undefined;
-    let resumenPerfil = '';
-    
-    if (userId) {
-      try {
-        const perfil = await analizarPatronesEmocionales(userId, 25);
-        resumenPerfil = await construirResumenPerfil(userId, perfil);
-        perfilContexto = {
-          emociones_frecuentes: perfil.emociones_frecuentes,
-          temas_recurrentes: perfil.temas_recurrentes,
-          patrones: perfil.patrones_comportamiento,
-          dias_sin_comunicacion: perfil.dias_sin_comunicacion,
-          tiene_historial: perfil.emociones_frecuentes.length > 0,
-        };
-      } catch (e) {
-        console.log('No se pudo cargar perfil del usuario:', e);
-      }
+    let perfilContexto: {
+      emociones_frecuentes?: string[];
+      temas_recurrentes?: string[];
+      patrones?: string[];
+      dias_sin_comunicacion?: number;
+      tiene_historial?: boolean;
+    } | undefined;
+
+    const perfilActivo = perfilParam ?? (userId
+      ? await analizarPatronesEmocionales(userId, 25).catch((e) => {
+          console.log('No se pudo cargar perfil del usuario:', e);
+          return undefined;
+        })
+      : undefined);
+
+    if (perfilActivo) {
+      perfilContexto = {
+        emociones_frecuentes: perfilActivo.emociones_frecuentes,
+        temas_recurrentes: perfilActivo.temas_recurrentes,
+        patrones: perfilActivo.patrones_comportamiento,
+        dias_sin_comunicacion: perfilActivo.dias_sin_comunicacion,
+        tiene_historial:
+          perfilActivo.emociones_frecuentes.length > 0 ||
+          perfilActivo.temas_recurrentes.length > 0,
+      };
     }
 
-    // Construir system prompt dinámico basado en perfil + estilo elegido
     const systemPrompt = construirPromptDinamico(perfilContexto, estilo);
-
-    // Construir prompts con variación
-    let userPrompt = mensaje;
-    let contextoDinamico = resumenPerfil;
-
-    if (contexto) {
-      contextoDinamico = `${resumenPerfil ? resumenPerfil + ' ' : ''}${contexto}`;
-    }
-
-    const promspts = construirPromptFinal(mensaje, systemPrompt, estilo, numeroMensaje, contextoDinamico);
+    const prompts = construirPromptFinal(mensaje, systemPrompt, estilo, numeroMensaje, contexto);
 
     if (process.env.NODE_ENV !== 'production') {
-      console.log(`[NOA DEBUG] Estilo=${estilo} (mensaje #${numeroMensaje})`);
+      const tienePersonalizacion = prompts.system.includes('PERSONALIZACIÓN PARA ESTE USUARIO');
+      console.log(
+        `[NOA DEBUG] Estilo=${estilo} (mensaje #${numeroMensaje}) userId=${userId ?? 'n/a'} personalizacion=${tienePersonalizacion} turnosHistorial=${historial.length}`,
+      );
     }
 
-    const respuestaCruda = await queryOllama(promspts.user, promspts.system);
+    const respuestaCruda = await queryOllama(prompts.user, prompts.system, historial);
     let respuesta = respuestaCruda.trim();
 
     if (!esRespuestaAceptable(respuesta, mensaje)) {
@@ -700,7 +753,6 @@ export const chatWithOllama = async (params: {
   } catch (error) {
     console.error('Error en chat con Ollama:', error);
 
-    // Fallback más natural
     const emocion = detectarEmocion(params.mensaje);
     return {
       respuesta: generarRespuestaFallbackNatural(emocion, params.mensaje),

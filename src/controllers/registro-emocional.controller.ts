@@ -48,7 +48,13 @@ export const saveRespuestasRegistroEmocional = async (req: Request, res: Respons
     };
 
     const result = await saveRespuestasRegistroEmocionalService({ usuario_id, respuestas });
-    res.status(201).json(APISuccessResponse(result, 'Respuestas de registro emocional guardadas'));
+    res.status(201).json({
+      success: true,
+      message: 'Respuestas de registro emocional guardadas',
+      data: result,
+      errors: null,
+      ...result,
+    });
   } catch (error) {
     console.error('Error guardando respuestas de registro emocional:', error);
 

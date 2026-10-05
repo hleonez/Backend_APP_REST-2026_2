@@ -129,6 +129,12 @@ const obtenerUltimoSemaforo = async (usuarioId: number): Promise<SemaforoActual 
 
   return {
     color,
+    // Fase 5: preferir la subcategoría persistida en BD
+    // (`<color_global>_<dimension_dominante>`, calculada por
+    // `asignacion-semaforo.controller.ts` / `analizarRespuestasOllama`).
+    // Queda en null para evaluaciones creadas antes de esta fase o sin
+    // datos suficientes para calcular dimensiones; en ese caso
+    // `construirContextoBienestar` aplica el fallback heurístico existente.
     subcategoria: ultimaEvaluacion.subcategoria_principal ?? null,
     puntaje_global: puntajeGlobal,
   };
