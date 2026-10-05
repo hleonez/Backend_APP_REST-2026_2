@@ -27,6 +27,11 @@ const loginSchema = z.object({
   contrasena: z.string(),
 });
 
+const recoverPasswordSchema = z.object({
+  correo: z.string().email('Correo inválido'),
+  nuevaContrasena: z.string().min(8, 'La contraseña debe tener al menos 8 caracteres'),
+});
+
 /**
  * Register a new user
  */
@@ -211,10 +216,61 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
 /**
  * Recover user password
+ *
+ * BUGFIX (reportado por Mariana - Fase 8, "documentado, no probado
+ * funcionalmente"): el endpoint estaba deshabilitado y retornaba
+ * siempre 410, en contradicción con su propia documentación Swagger
+ * (que promete 200/400/404 con body { correo, nuevaContrasena }).
+ * Se restaura la lógica funcional aplicando el mismo endurecimiento
+ * de seguridad que ya se usa en login/register: correo normalizado,
+ * y solo se permite recuperar cuentas activas y no eliminadas.
  */
 export const recoverPassword = async (
-  _req: Request,
+  req: Request,
   res: Response,
 ): Promise<void> => {
-  res.status(410).json({ message: 'La recuperación de contraseña no está disponible actualmente' });
+  try {
+    const validationResult = recoverPasswordSchema.safeParse(req.body);
+
+    if (!validationResult.success) {
+      res.status(400).json({
+        message: 'Datos inválidos',
+        errors: validationResult.error.errors,
+      });
+      return;
+    }
+
+    const { correo, nuevaContrasena } = validationResult.data;
+    const correoNormalizado = correo.toLowerCase().trim();
+
+    const [usuario] = await db
+      .select({ id: usuarios.id })
+      .from(usuarios)
+      .where(and(
+        eq(usuarios.correo, correoNormalizado),
+        isNull(usuarios.deleted_at),
+        eq(usuarios.is_active, true),
+      ))
+      .limit(1);
+
+    if (!usuario) {
+      res.status(404).json({ message: 'Usuario no encontrado' });
+      return;
+    }
+
+    const hashedPassword = await bcrypt.hash(nuevaContrasena, 10);
+
+    await db
+      .update(usuarios)
+      .set({
+        contrasena: hashedPassword,
+        updated_at: new Date(),
+      })
+      .where(eq(usuarios.id, usuario.id));
+
+    res.status(200).json({ message: 'Contraseña actualizada correctamente' });
+  } catch (error) {
+    console.error('Error recovering password:', error);
+    res.status(500).json({ message: 'Error en el servidor' });
+  }
 };
