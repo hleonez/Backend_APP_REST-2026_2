@@ -386,6 +386,17 @@ export const registro_actividades_usuarios = pgTable('registro_actividades_usuar
   opcion_id: integer('opcion_id')
     .references(() => opciones_registro_actividades.id, { onDelete: 'set null' }),
 
+  // Asignación y personalización por psicólogo
+  asignado_por_id: integer('asignado_por_id')
+    .references(() => usuarios.id, { onDelete: 'set null' }),
+  titulo_personalizado: varchar('titulo_personalizado', { length: 255 }),
+  descripcion_personalizada: text('descripcion_personalizada'),
+  dimension_objetivo: varchar('dimension_objetivo', { length: 80 }), // ej: ansiedad, sueno, estres_academico
+  prioridad: varchar('prioridad', { length: 20 }).default('media').notNull(), // 'baja' | 'media' | 'alta'
+  estado: varchar('estado', { length: 30 }).default('pendiente').notNull(), // 'pendiente' | 'completada' | 'cancelada'
+  fecha_completada: timestamp('fecha_completada'),
+  reflexiones_estudiante: text('reflexiones_estudiante'),
+
   vencimiento: timestamp('vencimiento').defaultNow().notNull(),
   fecha: timestamp('fecha').defaultNow().notNull(),
 
@@ -397,12 +408,20 @@ export const registro_actividades_usuarios = pgTable('registro_actividades_usuar
 }, (t) => ({
   idxRegistroActividadesUsuariosUsuarioId: index('idx_registro_actividades_usuarios_usuario_id').on(t.usuario_id),
   idxRegistroActividadesUsuariosOpcionId: index('idx_registro_actividades_usuarios_opcion_id').on(t.opcion_id),
+  idxRegistroActividadesUsuariosAsignadoPor: index('idx_registro_actividades_usuarios_asignado_por').on(t.asignado_por_id),
+  idxRegistroActividadesUsuariosEstado: index('idx_registro_actividades_usuarios_estado').on(t.estado),
 }));
 
 export const registro_actividades_usuariosrelations = relations(registro_actividades_usuarios, ({ one }) => ({
   usuario: one(usuarios, {
     fields: [registro_actividades_usuarios.usuario_id],
     references: [usuarios.id],
+    relationName: 'actividadesEstudiante',
+  }),
+  asignadoPor: one(usuarios, {
+    fields: [registro_actividades_usuarios.asignado_por_id],
+    references: [usuarios.id],
+    relationName: 'actividadesAsignadasPorPsicologo',
   }),
   opcion: one(opciones_registro_actividades, {
     fields: [registro_actividades_usuarios.opcion_id],
