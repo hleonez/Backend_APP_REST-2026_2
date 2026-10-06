@@ -12,10 +12,42 @@ import {
   getRegistroEmocionalEstudianteService,
   getEncuestasEstudianteService,
   getChatsEstudianteService,
+  asignarActividadEstudianteService,
+  actualizarActividadAsignadaService,
+  eliminarActividadAsignadaService,
+  getSugerenciasActividadesService,
 } from '../services/panel-psicologo.service';
 
 const estudianteIdSchema = z.object({
   estudianteId: z.coerce.number().int().positive(),
+});
+
+const actividadIdParamSchema = z.object({
+  estudianteId: z.coerce.number().int().positive(),
+  actividadId: z.coerce.number().int().positive(),
+});
+
+const asignarActividadBodySchema = z.object({
+  opcion_id: z.number().int().positive().optional().nullable(),
+  titulo_personalizado: z.string().min(1).max(255).optional().nullable(),
+  descripcion_personalizada: z.string().optional().nullable(),
+  dimension_objetivo: z.string().max(80).optional().nullable(),
+  prioridad: z.enum(['baja', 'media', 'alta']).optional(),
+  vencimiento: z.coerce.date().optional(),
+  observaciones: z.string().optional().nullable(),
+}).refine((data) => data.opcion_id || data.titulo_personalizado, {
+  message: 'Debe especificar al menos una opción del catálogo (opcion_id) o un título personalizado',
+});
+
+const actualizarActividadBodySchema = z.object({
+  opcion_id: z.number().int().positive().optional().nullable(),
+  titulo_personalizado: z.string().min(1).max(255).optional().nullable(),
+  descripcion_personalizada: z.string().optional().nullable(),
+  dimension_objetivo: z.string().max(80).optional().nullable(),
+  prioridad: z.enum(['baja', 'media', 'alta']).optional(),
+  vencimiento: z.coerce.date().optional(),
+  observaciones: z.string().optional().nullable(),
+  estado: z.enum(['pendiente', 'completada', 'cancelada']).optional(),
 });
 
 // ============================================================
@@ -391,3 +423,194 @@ export const getChatsEstudiante = async (
     res.status(500).json(APIErrorResponse('Error en el servidor'));
   }
 };
+
+// ============================================================
+// POST /api/psicologo/pacientes/:estudianteId/actividades
+// ============================================================
+
+/**
+ * Asigna una actividad (del catálogo o personalizada) a un estudiante.
+ */
+export const asignarActividadEstudiante = async (
+  req: AuthRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const psicologoId = req.user?.id;
+    if (!psicologoId) {
+      res.status(401).json(APIErrorResponse('Usuario no autenticado'));
+      return;
+    }
+
+    const paramParsed = estudianteIdSchema.safeParse(req.params);
+    if (!paramParsed.success) {
+      res.status(400).json(APIErrorResponse('ID de estudiante inválido'));
+      return;
+    }
+
+    const bodyParsed = asignarActividadBodySchema.safeParse(req.body);
+    if (!bodyParsed.success) {
+      res.status(400).json(APIErrorResponse(bodyParsed.error.errors[0]?.message || 'Datos de actividad inválidos'));
+      return;
+    }
+
+    const actividad = await asignarActividadEstudianteService({
+      estudianteId: paramParsed.data.estudianteId,
+      psicologoId,
+      opcionId: bodyParsed.data.opcion_id,
+      tituloPersonalizado: bodyParsed.data.titulo_personalizado,
+      descripcionPersonalizada: bodyParsed.data.descripcion_personalizada,
+      dimensionObjetivo: bodyParsed.data.dimension_objetivo,
+      prioridad: bodyParsed.data.prioridad,
+      vencimiento: bodyParsed.data.vencimiento,
+      observaciones: bodyParsed.data.observaciones,
+    });
+
+    res.status(201).json(APISuccessResponse(actividad, 'Actividad asignada exitosamente al estudiante'));
+  } catch (error) {
+    console.error('[panel-psicologo] asignarActividadEstudiante:', error);
+
+    const code = error instanceof Error ? (error as any).code : undefined;
+    if (code === 'ESTUDIANTE_NO_ENCONTRADO' || code === 'OPCION_NO_ENCONTRADA') {
+      res.status(404).json(APIErrorResponse((error as Error).message));
+      return;
+    }
+
+    res.status(500).json(APIErrorResponse('Error en el servidor'));
+  }
+};
+
+// ============================================================
+// PUT /api/psicologo/pacientes/:estudianteId/actividades/:actividadId
+// ============================================================
+
+/**
+ * Actualiza una actividad asignada a un estudiante.
+ */
+export const actualizarActividadEstudiante = async (
+  req: AuthRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const psicologoId = req.user?.id;
+    if (!psicologoId) {
+      res.status(401).json(APIErrorResponse('Usuario no autenticado'));
+      return;
+    }
+
+    const paramParsed = actividadIdParamSchema.safeParse(req.params);
+    if (!paramParsed.success) {
+      res.status(400).json(APIErrorResponse('Parámetros de ruta inválidos'));
+      return;
+    }
+
+    const bodyParsed = actualizarActividadBodySchema.safeParse(req.body);
+    if (!bodyParsed.success) {
+      res.status(400).json(APIErrorResponse(bodyParsed.error.errors[0]?.message || 'Datos de actualización inválidos'));
+      return;
+    }
+
+    const actividad = await actualizarActividadAsignadaService({
+      actividadId: paramParsed.data.actividadId,
+      estudianteId: paramParsed.data.estudianteId,
+      psicologoId,
+      opcionId: bodyParsed.data.opcion_id,
+      tituloPersonalizado: bodyParsed.data.titulo_personalizado,
+      descripcionPersonalizada: bodyParsed.data.descripcion_personalizada,
+      dimensionObjetivo: bodyParsed.data.dimension_objetivo,
+      prioridad: bodyParsed.data.prioridad,
+      vencimiento: bodyParsed.data.vencimiento,
+      observaciones: bodyParsed.data.observaciones,
+      estado: bodyParsed.data.estado,
+    });
+
+    res.status(200).json(APISuccessResponse(actividad, 'Actividad actualizada exitosamente'));
+  } catch (error) {
+    console.error('[panel-psicologo] actualizarActividadEstudiante:', error);
+
+    const code = error instanceof Error ? (error as any).code : undefined;
+    if (code === 'ESTUDIANTE_NO_ENCONTRADO' || code === 'ACTIVIDAD_NO_ENCONTRADA') {
+      res.status(404).json(APIErrorResponse((error as Error).message));
+      return;
+    }
+
+    res.status(500).json(APIErrorResponse('Error en el servidor'));
+  }
+};
+
+// ============================================================
+// DELETE /api/psicologo/pacientes/:estudianteId/actividades/:actividadId
+// ============================================================
+
+/**
+ * Elimina (soft delete) una actividad asignada a un estudiante.
+ */
+export const eliminarActividadEstudiante = async (
+  req: AuthRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const psicologoId = req.user?.id;
+    if (!psicologoId) {
+      res.status(401).json(APIErrorResponse('Usuario no autenticado'));
+      return;
+    }
+
+    const paramParsed = actividadIdParamSchema.safeParse(req.params);
+    if (!paramParsed.success) {
+      res.status(400).json(APIErrorResponse('Parámetros de ruta inválidos'));
+      return;
+    }
+
+    await eliminarActividadAsignadaService(
+      paramParsed.data.actividadId,
+      paramParsed.data.estudianteId
+    );
+
+    res.status(200).json(APISuccessResponse(null, 'Actividad eliminada exitosamente'));
+  } catch (error) {
+    console.error('[panel-psicologo] eliminarActividadEstudiante:', error);
+
+    const code = error instanceof Error ? (error as any).code : undefined;
+    if (code === 'ESTUDIANTE_NO_ENCONTRADO' || code === 'ACTIVIDAD_NO_ENCONTRADA') {
+      res.status(404).json(APIErrorResponse((error as Error).message));
+      return;
+    }
+
+    res.status(500).json(APIErrorResponse('Error en el servidor'));
+  }
+};
+
+// ============================================================
+// GET /api/psicologo/pacientes/:estudianteId/actividades/sugerencias
+// ============================================================
+
+/**
+ * Sugerencias inteligentes de actividades según dimensiones en rojo/amarillo del semáforo.
+ */
+export const getSugerenciasActividades = async (
+  req: AuthRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const parsed = estudianteIdSchema.safeParse(req.params);
+    if (!parsed.success) {
+      res.status(400).json(APIErrorResponse('ID de estudiante inválido'));
+      return;
+    }
+
+    const sugerencias = await getSugerenciasActividadesService(parsed.data.estudianteId);
+    res.status(200).json(APISuccessResponse(sugerencias, 'Sugerencias de actividades obtenidas'));
+  } catch (error) {
+    console.error('[panel-psicologo] getSugerenciasActividades:', error);
+
+    const code = error instanceof Error ? (error as any).code : undefined;
+    if (code === 'ESTUDIANTE_NO_ENCONTRADO') {
+      res.status(404).json(APIErrorResponse((error as Error).message));
+      return;
+    }
+
+    res.status(500).json(APIErrorResponse('Error en el servidor'));
+  }
+};
+
