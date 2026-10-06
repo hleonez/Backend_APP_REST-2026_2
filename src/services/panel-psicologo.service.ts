@@ -1,7 +1,9 @@
-import { and, asc, desc, eq, gt, inArray, isNull } from 'drizzle-orm';
+import { aliasedTable, and, asc, desc, eq, gt, inArray, isNull } from 'drizzle-orm';
 import { db } from '../db';
 import * as schema from '../db/schema';
 import { getEstadisticasService } from './estadisticas-registro-emocional.service';
+
+const psicologoAsignador = aliasedTable(schema.usuarios, 'psicologo_asignador');
 
 // ============================================================
 // Tipos de respuesta
@@ -44,6 +46,15 @@ export interface ActividadVigente {
   id: number;
   vencimiento: Date;
   observaciones: string | null;
+  asignado_por_id: number | null;
+  asignado_por_nombre: string | null;
+  titulo_personalizado: string | null;
+  descripcion_personalizada: string | null;
+  dimension_objetivo: string | null;
+  prioridad: string;
+  estado: string;
+  fecha_completada: Date | null;
+  reflexiones_estudiante: string | null;
   opcion: {
     id: number;
     nombre: string;
@@ -74,6 +85,15 @@ export interface ActividadHistorial {
   vencimiento: Date;
   vencida: boolean;
   observaciones: string | null;
+  asignado_por_id: number | null;
+  asignado_por_nombre: string | null;
+  titulo_personalizado: string | null;
+  descripcion_personalizada: string | null;
+  dimension_objetivo: string | null;
+  prioridad: string;
+  estado: string;
+  fecha_completada: Date | null;
+  reflexiones_estudiante: string | null;
   opcion: {
     id: number;
     nombre: string;
@@ -197,13 +217,23 @@ export const getResumenEstudianteService = async (
     ? { ...ultimaEval, dimensiones }
     : null;
 
-  // 4. Actividades vigentes (vencimiento >= ahora)
+  // 4. Actividades vigentes (vencimiento >= ahora y no canceladas)
   const ahora = new Date();
   const actividadesRaw = await db
     .select({
       id: schema.registro_actividades_usuarios.id,
       vencimiento: schema.registro_actividades_usuarios.vencimiento,
       observaciones: schema.registro_actividades_usuarios.observaciones,
+      asignado_por_id: schema.registro_actividades_usuarios.asignado_por_id,
+      asignador_nombres: psicologoAsignador.nombres,
+      asignador_apellidos: psicologoAsignador.apellidos,
+      titulo_personalizado: schema.registro_actividades_usuarios.titulo_personalizado,
+      descripcion_personalizada: schema.registro_actividades_usuarios.descripcion_personalizada,
+      dimension_objetivo: schema.registro_actividades_usuarios.dimension_objetivo,
+      prioridad: schema.registro_actividades_usuarios.prioridad,
+      estado: schema.registro_actividades_usuarios.estado,
+      fecha_completada: schema.registro_actividades_usuarios.fecha_completada,
+      reflexiones_estudiante: schema.registro_actividades_usuarios.reflexiones_estudiante,
       opcion_id: schema.registro_actividades_usuarios.opcion_id,
       opcion_nombre: schema.opciones_registro_actividades.nombre,
       opcion_url_imagen: schema.opciones_registro_actividades.url_imagen,
@@ -215,6 +245,13 @@ export const getResumenEstudianteService = async (
       eq(
         schema.registro_actividades_usuarios.opcion_id,
         schema.opciones_registro_actividades.id
+      )
+    )
+    .leftJoin(
+      psicologoAsignador,
+      eq(
+        schema.registro_actividades_usuarios.asignado_por_id,
+        psicologoAsignador.id
       )
     )
     .where(
@@ -230,6 +267,17 @@ export const getResumenEstudianteService = async (
     id: a.id,
     vencimiento: a.vencimiento,
     observaciones: a.observaciones,
+    asignado_por_id: a.asignado_por_id,
+    asignado_por_nombre: a.asignador_nombres
+      ? `${a.asignador_nombres} ${a.asignador_apellidos || ''}`.trim()
+      : null,
+    titulo_personalizado: a.titulo_personalizado,
+    descripcion_personalizada: a.descripcion_personalizada,
+    dimension_objetivo: a.dimension_objetivo,
+    prioridad: a.prioridad,
+    estado: a.estado,
+    fecha_completada: a.fecha_completada,
+    reflexiones_estudiante: a.reflexiones_estudiante,
     opcion: a.opcion_id
       ? {
           id: a.opcion_id,
@@ -339,6 +387,16 @@ export const getActividadesEstudianteService = async (
       fecha: schema.registro_actividades_usuarios.fecha,
       vencimiento: schema.registro_actividades_usuarios.vencimiento,
       observaciones: schema.registro_actividades_usuarios.observaciones,
+      asignado_por_id: schema.registro_actividades_usuarios.asignado_por_id,
+      asignador_nombres: psicologoAsignador.nombres,
+      asignador_apellidos: psicologoAsignador.apellidos,
+      titulo_personalizado: schema.registro_actividades_usuarios.titulo_personalizado,
+      descripcion_personalizada: schema.registro_actividades_usuarios.descripcion_personalizada,
+      dimension_objetivo: schema.registro_actividades_usuarios.dimension_objetivo,
+      prioridad: schema.registro_actividades_usuarios.prioridad,
+      estado: schema.registro_actividades_usuarios.estado,
+      fecha_completada: schema.registro_actividades_usuarios.fecha_completada,
+      reflexiones_estudiante: schema.registro_actividades_usuarios.reflexiones_estudiante,
       opcion_id: schema.registro_actividades_usuarios.opcion_id,
       opcion_nombre: schema.opciones_registro_actividades.nombre,
       opcion_url_imagen: schema.opciones_registro_actividades.url_imagen,
@@ -350,6 +408,13 @@ export const getActividadesEstudianteService = async (
       eq(
         schema.registro_actividades_usuarios.opcion_id,
         schema.opciones_registro_actividades.id
+      )
+    )
+    .leftJoin(
+      psicologoAsignador,
+      eq(
+        schema.registro_actividades_usuarios.asignado_por_id,
+        psicologoAsignador.id
       )
     )
     .where(
@@ -364,8 +429,19 @@ export const getActividadesEstudianteService = async (
     id: a.id,
     fecha: a.fecha,
     vencimiento: a.vencimiento,
-    vencida: a.vencimiento < ahora,
+    vencida: a.vencimiento < ahora && a.estado !== 'completada',
     observaciones: a.observaciones,
+    asignado_por_id: a.asignado_por_id,
+    asignado_por_nombre: a.asignador_nombres
+      ? `${a.asignador_nombres} ${a.asignador_apellidos || ''}`.trim()
+      : null,
+    titulo_personalizado: a.titulo_personalizado,
+    descripcion_personalizada: a.descripcion_personalizada,
+    dimension_objetivo: a.dimension_objetivo,
+    prioridad: a.prioridad,
+    estado: a.estado,
+    fecha_completada: a.fecha_completada,
+    reflexiones_estudiante: a.reflexiones_estudiante,
     opcion: a.opcion_id
       ? {
           id: a.opcion_id,
@@ -716,4 +792,302 @@ export const getChatsEstudianteService = async (
     ...c,
     mensajes: mensajesPorChat.get(c.id) ?? [],
   }));
+};
+
+// ============================================================
+// Servicios: Asignación y Personalización de Actividades
+// ============================================================
+
+export interface AsignarActividadInput {
+  estudianteId: number;
+  psicologoId: number;
+  opcionId?: number | null;
+  tituloPersonalizado?: string | null;
+  descripcionPersonalizada?: string | null;
+  dimensionObjetivo?: string | null;
+  prioridad?: 'baja' | 'media' | 'alta';
+  vencimiento?: Date;
+  observaciones?: string | null;
+}
+
+export interface ActualizarActividadInput {
+  actividadId: number;
+  estudianteId: number;
+  psicologoId: number;
+  opcionId?: number | null;
+  tituloPersonalizado?: string | null;
+  descripcionPersonalizada?: string | null;
+  dimensionObjetivo?: string | null;
+  prioridad?: 'baja' | 'media' | 'alta';
+  vencimiento?: Date;
+  observaciones?: string | null;
+  estado?: 'pendiente' | 'completada' | 'cancelada';
+}
+
+/**
+ * Asigna o personaliza una actividad clínica para un estudiante.
+ */
+export const asignarActividadEstudianteService = async (
+  input: AsignarActividadInput
+): Promise<ActividadHistorial> => {
+  await getPerfilEstudianteService(input.estudianteId);
+
+  // Si se envió opcionId, verificar que la opción existe
+  let opcionInfo: { id: number; nombre: string; url_imagen: string; descripcion: string | null } | null = null;
+  if (input.opcionId) {
+    const [opcion] = await db
+      .select({
+        id: schema.opciones_registro_actividades.id,
+        nombre: schema.opciones_registro_actividades.nombre,
+        url_imagen: schema.opciones_registro_actividades.url_imagen,
+        descripcion: schema.opciones_registro_actividades.descripcion,
+      })
+      .from(schema.opciones_registro_actividades)
+      .where(
+        and(
+          eq(schema.opciones_registro_actividades.id, input.opcionId),
+          isNull(schema.opciones_registro_actividades.deleted_at)
+        )
+      );
+
+    if (!opcion) {
+      const error: any = new Error('La opción de actividad del catálogo no existe');
+      error.code = 'OPCION_NO_ENCONTRADA';
+      throw error;
+    }
+    opcionInfo = opcion;
+  }
+
+  // Vencimiento por defecto: 7 días a partir de hoy si no se especifica
+  const vencimiento = input.vencimiento ?? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+  const [nuevaActividad] = await db
+    .insert(schema.registro_actividades_usuarios)
+    .values({
+      usuario_id: input.estudianteId,
+      opcion_id: input.opcionId ?? null,
+      asignado_por_id: input.psicologoId,
+      titulo_personalizado: input.tituloPersonalizado?.trim() || null,
+      descripcion_personalizada: input.descripcionPersonalizada?.trim() || null,
+      dimension_objetivo: input.dimensionObjetivo?.trim() || null,
+      prioridad: input.prioridad || 'media',
+      estado: 'pendiente',
+      vencimiento,
+      fecha: new Date(),
+      observaciones: input.observaciones?.trim() || null,
+    })
+    .returning();
+
+  // Obtener nombre del psicólogo asignador
+  const [psicologo] = await db
+    .select({ nombres: schema.usuarios.nombres, apellidos: schema.usuarios.apellidos })
+    .from(schema.usuarios)
+    .where(eq(schema.usuarios.id, input.psicologoId));
+
+  return {
+    id: nuevaActividad.id,
+    fecha: nuevaActividad.fecha,
+    vencimiento: nuevaActividad.vencimiento,
+    vencida: false,
+    observaciones: nuevaActividad.observaciones,
+    asignado_por_id: nuevaActividad.asignado_por_id,
+    asignado_por_nombre: psicologo ? `${psicologo.nombres} ${psicologo.apellidos}`.trim() : null,
+    titulo_personalizado: nuevaActividad.titulo_personalizado,
+    descripcion_personalizada: nuevaActividad.descripcion_personalizada,
+    dimension_objetivo: nuevaActividad.dimension_objetivo,
+    prioridad: nuevaActividad.prioridad,
+    estado: nuevaActividad.estado,
+    fecha_completada: nuevaActividad.fecha_completada,
+    reflexiones_estudiante: nuevaActividad.reflexiones_estudiante,
+    opcion: opcionInfo,
+  };
+};
+
+/**
+ * Actualiza los parámetros de una actividad asignada a un estudiante por el psicólogo.
+ */
+export const actualizarActividadAsignadaService = async (
+  input: ActualizarActividadInput
+): Promise<ActividadHistorial> => {
+  await getPerfilEstudianteService(input.estudianteId);
+
+  // Verificar que la actividad exista y pertenezca al estudiante
+  const [actividadExistente] = await db
+    .select()
+    .from(schema.registro_actividades_usuarios)
+    .where(
+      and(
+        eq(schema.registro_actividades_usuarios.id, input.actividadId),
+        eq(schema.registro_actividades_usuarios.usuario_id, input.estudianteId),
+        isNull(schema.registro_actividades_usuarios.deleted_at)
+      )
+    );
+
+  if (!actividadExistente) {
+    const error: any = new Error('Actividad no encontrada para este paciente');
+    error.code = 'ACTIVIDAD_NO_ENCONTRADA';
+    throw error;
+  }
+
+  const updateValues: Partial<typeof schema.registro_actividades_usuarios.$inferInsert> = {
+    updated_at: new Date(),
+  };
+
+  if (input.opcionId !== undefined) updateValues.opcion_id = input.opcionId;
+  if (input.tituloPersonalizado !== undefined) updateValues.titulo_personalizado = input.tituloPersonalizado?.trim() || null;
+  if (input.descripcionPersonalizada !== undefined) updateValues.descripcion_personalizada = input.descripcionPersonalizada?.trim() || null;
+  if (input.dimensionObjetivo !== undefined) updateValues.dimension_objetivo = input.dimensionObjetivo?.trim() || null;
+  if (input.prioridad !== undefined) updateValues.prioridad = input.prioridad;
+  if (input.vencimiento !== undefined) updateValues.vencimiento = input.vencimiento;
+  if (input.observaciones !== undefined) updateValues.observaciones = input.observaciones?.trim() || null;
+  if (input.estado !== undefined) {
+    updateValues.estado = input.estado;
+    if (input.estado === 'completada' && !actividadExistente.fecha_completada) {
+      updateValues.fecha_completada = new Date();
+    }
+  }
+
+  const [actividadActualizada] = await db
+    .update(schema.registro_actividades_usuarios)
+    .set(updateValues)
+    .where(eq(schema.registro_actividades_usuarios.id, input.actividadId))
+    .returning();
+
+  let opcionInfo: { id: number; nombre: string; url_imagen: string; descripcion: string | null } | null = null;
+  if (actividadActualizada.opcion_id) {
+    const [opc] = await db
+      .select({
+        id: schema.opciones_registro_actividades.id,
+        nombre: schema.opciones_registro_actividades.nombre,
+        url_imagen: schema.opciones_registro_actividades.url_imagen,
+        descripcion: schema.opciones_registro_actividades.descripcion,
+      })
+      .from(schema.opciones_registro_actividades)
+      .where(eq(schema.opciones_registro_actividades.id, actividadActualizada.opcion_id));
+    if (opc) opcionInfo = opc;
+  }
+
+  const [psicologo] = actividadActualizada.asignado_por_id
+    ? await db
+        .select({ nombres: schema.usuarios.nombres, apellidos: schema.usuarios.apellidos })
+        .from(schema.usuarios)
+        .where(eq(schema.usuarios.id, actividadActualizada.asignado_por_id))
+    : [null];
+
+  const ahora = new Date();
+
+  return {
+    id: actividadActualizada.id,
+    fecha: actividadActualizada.fecha,
+    vencimiento: actividadActualizada.vencimiento,
+    vencida: actividadActualizada.vencimiento < ahora && actividadActualizada.estado !== 'completada',
+    observaciones: actividadActualizada.observaciones,
+    asignado_por_id: actividadActualizada.asignado_por_id,
+    asignado_por_nombre: psicologo ? `${psicologo.nombres} ${psicologo.apellidos}`.trim() : null,
+    titulo_personalizado: actividadActualizada.titulo_personalizado,
+    descripcion_personalizada: actividadActualizada.descripcion_personalizada,
+    dimension_objetivo: actividadActualizada.dimension_objetivo,
+    prioridad: actividadActualizada.prioridad,
+    estado: actividadActualizada.estado,
+    fecha_completada: actividadActualizada.fecha_completada,
+    reflexiones_estudiante: actividadActualizada.reflexiones_estudiante,
+    opcion: opcionInfo,
+  };
+};
+
+/**
+ * Elimina lógicamente una actividad asignada.
+ */
+export const eliminarActividadAsignadaService = async (
+  actividadId: number,
+  estudianteId: number
+): Promise<void> => {
+  await getPerfilEstudianteService(estudianteId);
+
+  const [actividadExistente] = await db
+    .select({ id: schema.registro_actividades_usuarios.id })
+    .from(schema.registro_actividades_usuarios)
+    .where(
+      and(
+        eq(schema.registro_actividades_usuarios.id, actividadId),
+        eq(schema.registro_actividades_usuarios.usuario_id, estudianteId),
+        isNull(schema.registro_actividades_usuarios.deleted_at)
+      )
+    );
+
+  if (!actividadExistente) {
+    const error: any = new Error('Actividad no encontrada para este paciente');
+    error.code = 'ACTIVIDAD_NO_ENCONTRADA';
+    throw error;
+  }
+
+  await db
+    .update(schema.registro_actividades_usuarios)
+    .set({ deleted_at: new Date(), updated_at: new Date() })
+    .where(eq(schema.registro_actividades_usuarios.id, actividadId));
+};
+
+/**
+ * Retorna sugerencias inteligentes de actividades según las dimensiones críticas
+ * (en nivel 'rojo' o 'amarillo') de la última evaluación del estudiante.
+ */
+export const getSugerenciasActividadesService = async (estudianteId: number) => {
+  const resumen = await getResumenEstudianteService(estudianteId);
+
+  // Obtener catálogo disponible
+  const catalogoOpciones = await db
+    .select({
+      id: schema.opciones_registro_actividades.id,
+      nombre: schema.opciones_registro_actividades.nombre,
+      descripcion: schema.opciones_registro_actividades.descripcion,
+      url_imagen: schema.opciones_registro_actividades.url_imagen,
+    })
+    .from(schema.opciones_registro_actividades)
+    .where(isNull(schema.opciones_registro_actividades.deleted_at));
+
+  const dimensionesCriticas = (resumen.ultima_evaluacion?.dimensiones || []).filter(
+    (d) => d.nivel === 'rojo' || d.nivel === 'amarillo'
+  );
+
+  const sugerenciasPorDimension: Record<string, {
+    sugerencia: string;
+    prioridadRecomendada: 'alta' | 'media';
+    actividadesRecomendadas: typeof catalogoOpciones;
+  }> = {};
+
+  for (const dim of dimensionesCriticas) {
+    const key = dim.dimension.toLowerCase();
+    const prioridad: 'alta' | 'media' = dim.nivel === 'rojo' ? 'alta' : 'media';
+
+    let sugerenciaTexto = `Enfoque terapéutico preventivo para ${dim.dimension}`;
+    if (key.includes('ansiedad')) {
+      sugerenciaTexto = 'Se recomiendan ejercicios de respiración 4-7-8, relajación progresiva y pausas de grounding sensorial.';
+    } else if (key.includes('estres') || key.includes('academico')) {
+      sugerenciaTexto = 'Se sugiere fraccionar tareas académicas (técnica Pomodoro) y fijar pausas activas programadas.';
+    } else if (key.includes('sueno')) {
+      sugerenciaTexto = 'Se sugiere pauta de desconexión de pantallas 45 min antes de dormir y horario constante de descanso.';
+    } else if (key.includes('depresivo') || key.includes('humor')) {
+      sugerenciaTexto = 'Se recomienda activación conductual: caminatas breves diarias y registro de un evento positivo al día.';
+    } else if (key.includes('sociales')) {
+      sugerenciaTexto = 'Se sugiere pauta de conexión social: agendar una llamada o encuentro con una persona de confianza.';
+    } else if (key.includes('autoestima') || key.includes('autocuidado')) {
+      sugerenciaTexto = 'Se recomienda ejercicio diario de autorreconocimiento y actividad placentera sin culpa.';
+    } else if (key.includes('energia') || key.includes('motivacion')) {
+      sugerenciaTexto = 'Se sugiere micro-metas diarias alcanzables y estiramientos corporales al despertar.';
+    }
+
+    sugerenciasPorDimension[dim.dimension] = {
+      sugerencia: sugerenciaTexto,
+      prioridadRecomendada: prioridad,
+      actividadesRecomendadas: catalogoOpciones.slice(0, 3),
+    };
+  }
+
+  return {
+    estudianteId,
+    ultima_evaluacion: resumen.ultima_evaluacion,
+    dimensionesCriticas,
+    sugerencias: sugerenciasPorDimension,
+    catalogoCompleto: catalogoOpciones,
+  };
 };

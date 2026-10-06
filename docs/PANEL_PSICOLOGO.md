@@ -100,6 +100,10 @@ Rutas base: `/api/psicologo/pacientes/:estudianteId/*`
 | `GET` | `/api/psicologo/pacientes/:estudianteId/resumen` | `esPsicologoDeEstudiante` | Ficha clínica consolidada (perfil + última evaluación con semáforo y 7 dimensiones + actividades vigentes) |
 | `GET` | `/api/psicologo/pacientes/:estudianteId/evaluaciones` | `esPsicologoDeEstudiante` | Historial completo de evaluaciones psicológicas, puntajes, semáforos y desglose de dimensiones |
 | `GET` | `/api/psicologo/pacientes/:estudianteId/actividades` | `esPsicologoDeEstudiante` | Historial de actividades realizadas, vigentes y vencidas |
+| `GET` | `/api/psicologo/pacientes/:estudianteId/actividades/sugerencias` | `esPsicologoDeEstudiante` | Sugerencias clínicas inteligentes según dimensiones críticas ('rojo'/'amarillo') y catálogo |
+| `POST` | `/api/psicologo/pacientes/:estudianteId/actividades` | `esPsicologoDeEstudiante` | Asignar o personalizar una actividad clínica (catálogo o instrucciones propias) para el estudiante |
+| `PUT` | `/api/psicologo/pacientes/:estudianteId/actividades/:actividadId` | `esPsicologoDeEstudiante` | Modificar instrucciones, fechas, prioridad o estado de una actividad asignada |
+| `DELETE` | `/api/psicologo/pacientes/:estudianteId/actividades/:actividadId` | `esPsicologoDeEstudiante` | Baja lógica (soft delete) de una actividad asignada |
 | `GET` | `/api/psicologo/pacientes/:estudianteId/registro-emocional/estadisticas` | `esPsicologoDeEstudiante` | Métricas estadísticas agregadas (promedio de bienestar, puntaje mín/máx, frecuencias y distribución de estados) |
 | `GET` | `/api/psicologo/pacientes/:estudianteId/registro-emocional` | `esPsicologoDeEstudiante` | Registros emocionales diarios ordenados cronológicamente |
 | `GET` | `/api/psicologo/pacientes/:estudianteId/encuestas` | `esPsicologoDeEstudiante` | Historial de respuestas a encuestas institucionales del estudiante |
