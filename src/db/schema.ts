@@ -711,3 +711,132 @@ export const texto_aplicacion = pgTable('texto_aplicacion', {
   updated_at: timestamp('updated_at').defaultNow().notNull(),
   deleted_at: timestamp('deleted_at'),
 });
+
+// ================================
+// MODULO OVAs NOA
+// ================================
+
+export const ovas = pgTable('ovas', {
+  id: serial('id').primaryKey(),
+  creado_por: integer('creado_por').references(() => usuarios.id, { onDelete: 'set null' }),
+  titulo: varchar('titulo', { length: 255 }).notNull(),
+  descripcion: text('descripcion'),
+  tipo_actividad: varchar('tipo_actividad', { length: 50 }).notNull(), // 'video' | 'respiracion' | 'ejercicio_practico'
+  duracion_minutos: integer('duracion_minutos').default(5).notNull(),
+  storage_source: varchar('storage_source', { length: 50 }).default('YOUTUBE').notNull(), // 'YOUTUBE' | 'CLOUDFLARE_R2' | 'EXTERNAL_URL'
+  resource_url: text('resource_url').notNull(),
+  is_active: boolean('is_active').default(true).notNull(),
+  created_at: timestamp('created_at').defaultNow().notNull(),
+  updated_at: timestamp('updated_at').defaultNow().notNull(),
+  deleted_at: timestamp('deleted_at'),
+}, (t) => ({
+  idxOvasIsActive: index('idx_ovas_is_active').on(t.is_active),
+  idxOvasCreadoPor: index('idx_ovas_creado_por').on(t.creado_por),
+}));
+
+export const ovasrelations = relations(ovas, ({ one, many }) => ({
+  creador: one(usuarios, {
+    fields: [ovas.creado_por],
+    references: [usuarios.id],
+  }),
+  reglas: many(ova_reglas),
+  asignaciones: many(ova_asignaciones),
+}));
+
+export const ova_reglas = pgTable('ova_reglas', {
+  id: serial('id').primaryKey(),
+  ova_id: integer('ova_id').references(() => ovas.id, { onDelete: 'cascade' }).notNull(),
+  creado_por: integer('creado_por').references(() => usuarios.id, { onDelete: 'set null' }),
+  dimension: varchar('dimension', { length: 80 }),
+  nivel: varchar('nivel', { length: 20 }),
+  prioridad: integer('prioridad').default(0).notNull(),
+  is_active: boolean('is_active').default(true).notNull(),
+  created_at: timestamp('created_at').defaultNow().notNull(),
+  updated_at: timestamp('updated_at').defaultNow().notNull(),
+  deleted_at: timestamp('deleted_at'),
+}, (t) => ({
+  idxOvaReglasOvaId: index('idx_ova_reglas_ova_id').on(t.ova_id),
+  idxOvaReglasIsActive: index('idx_ova_reglas_is_active').on(t.is_active),
+  idxOvaReglasMatchUnique: uniqueIndex('idx_ova_reglas_match_unique')
+    .on(t.ova_id, t.dimension, t.nivel)
+    .where(sql`deleted_at IS NULL`),
+}));
+
+export const ova_reglasrelations = relations(ova_reglas, ({ one, many }) => ({
+  ova: one(ovas, {
+    fields: [ova_reglas.ova_id],
+    references: [ovas.id],
+  }),
+  creador: one(usuarios, {
+    fields: [ova_reglas.creado_por],
+    references: [usuarios.id],
+  }),
+  asignaciones: many(ova_asignaciones),
+}));
+
+export const ova_asignaciones = pgTable('ova_asignaciones', {
+  id: serial('id').primaryKey(),
+  estudiante_id: integer('estudiante_id').references(() => usuarios.id, { onDelete: 'cascade' }).notNull(),
+  ova_id: integer('ova_id').references(() => ovas.id, { onDelete: 'cascade' }).notNull(),
+  regla_id: integer('regla_id').references(() => ova_reglas.id, { onDelete: 'set null' }),
+  pre_evaluacion_id: integer('pre_evaluacion_id').references(() => evaluaciones.id, { onDelete: 'cascade' }).notNull(),
+  post_evaluacion_id: integer('post_evaluacion_id').references(() => evaluaciones.id, { onDelete: 'set null' }),
+  
+  estado: varchar('estado', { length: 30 }).default('PENDING').notNull(), // 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'SKIPPED' | 'DISMISSED'
+
+  // Match snapshot
+  matched_dimension: varchar('matched_dimension', { length: 80 }),
+  matched_nivel: varchar('matched_nivel', { length: 20 }),
+  matched_subcategoria: varchar('matched_subcategoria', { length: 120 }),
+  prioridad: integer('prioridad').default(0).notNull(),
+
+  // Feedback y seguimiento
+  started_at: timestamp('started_at'),
+  completed_at: timestamp('completed_at'),
+  liked: boolean('liked'),
+  rating: integer('rating'),
+  feedback_en: timestamp('feedback_en'),
+
+  // Efectividad
+  pre_puntaje: numeric('pre_puntaje', { precision: 5, scale: 2 }),
+  post_puntaje: numeric('post_puntaje', { precision: 5, scale: 2 }),
+  delta_puntaje: numeric('delta_puntaje', { precision: 5, scale: 2 }),
+  pre_estado_semaforo: varchar('pre_estado_semaforo', { length: 20 }),
+  post_estado_semaforo: varchar('post_estado_semaforo', { length: 20 }),
+
+  created_at: timestamp('created_at').defaultNow().notNull(),
+  updated_at: timestamp('updated_at').defaultNow().notNull(),
+  deleted_at: timestamp('deleted_at'),
+}, (t) => ({
+  idxOvaAsigEstudianteEstado: index('idx_ova_asig_estudiante_estado').on(t.estudiante_id, t.estado),
+  idxOvaAsigOvaId: index('idx_ova_asig_ova_id').on(t.ova_id),
+  idxOvaAsigPostEvalPend: index('idx_ova_asig_post_eval_pend')
+    .on(t.post_evaluacion_id)
+    .where(sql`post_evaluacion_id IS NULL AND estado = 'COMPLETED'`),
+  idxOvaAsigEstudianteOvaActive: uniqueIndex('idx_ova_asig_estudiante_ova_active')
+    .on(t.estudiante_id, t.ova_id)
+    .where(sql`estado IN ('PENDING', 'IN_PROGRESS') AND deleted_at IS NULL`),
+}));
+
+export const ova_asignacionesrelations = relations(ova_asignaciones, ({ one }) => ({
+  estudiante: one(usuarios, {
+    fields: [ova_asignaciones.estudiante_id],
+    references: [usuarios.id],
+  }),
+  ova: one(ovas, {
+    fields: [ova_asignaciones.ova_id],
+    references: [ovas.id],
+  }),
+  regla: one(ova_reglas, {
+    fields: [ova_asignaciones.regla_id],
+    references: [ova_reglas.id],
+  }),
+  preEvaluacion: one(evaluaciones, {
+    fields: [ova_asignaciones.pre_evaluacion_id],
+    references: [evaluaciones.id],
+  }),
+  postEvaluacion: one(evaluaciones, {
+    fields: [ova_asignaciones.post_evaluacion_id],
+    references: [evaluaciones.id],
+  }),
+}));
