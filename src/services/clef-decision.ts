@@ -37,8 +37,11 @@ const RAICES_POS: RaizId[] = ['logro_o_alivio', 'animo_gratitud', 'positivo_gene
 
 export const CRITERIO_CRISIS = 'Riesgo critico inmediato';
 
-export const UMBRAL_CRISIS_DEFECTO = 2.5;
-export const UMBRAL_DOMINIO_DEFECTO = 0.85;
+export const UMBRAL_CRISIS_DEFECTO = 1.5;
+export const UMBRAL_DOMINIO_DEFECTO = 0.8;
+export const UMBRAL_CONFIANZA_NEG = 0.85;
+export const UMBRAL_CRISIS_CON_NEG_ALTO = 1.2;
+export const UMBRAL_PROBABILIDAD_CRITICA = 0.15;
 
 export const MENSAJE_FUERA_DE_DOMINIO =
   'Mi propósito en NOA es acompañarte en tu bienestar y gestión emocional. ' +
@@ -189,12 +192,19 @@ export const leerProbabilidad = (valor: unknown): number | undefined => {
   if (typeof valor === 'number' && Number.isFinite(valor)) return valor;
   if (!valor || typeof valor !== 'object') return undefined;
   const objeto = valor as Record<string, unknown>;
-  for (const clave of ['probability', 'probabilidad', 'value', 'score']) {
+  for (const clave of ['probability', 'probabilidad', 'value', 'score', 'noul']) {
     if (typeof objeto[clave] === 'number' && Number.isFinite(objeto[clave] as number)) {
       return objeto[clave] as number;
     }
   }
   return undefined;
+};
+
+const leerProbabilidadNivel = (valor: unknown, nivel: string): number | undefined => {
+  if (!valor || typeof valor !== 'object') return undefined;
+  const probabilidades = (valor as { probabilities?: Record<string, unknown> }).probabilities;
+  const peso = probabilidades?.[nivel];
+  return typeof peso === 'number' && Number.isFinite(peso) ? peso : undefined;
 };
 
 export const leerOpcion = (valor: unknown): string | undefined => {
@@ -235,9 +245,15 @@ export const interpretarClef = (
 
   const opcionCrisis = leerOpcion(answers.alerta_crisis);
   const scoreCrisis = leerProbabilidad(answers.alerta_crisis);
+  const probabilidadCritica = leerProbabilidadNivel(answers.alerta_crisis, '3');
+  const negAlto = sentimiento.origen === 'encoder'
+    && sentimiento.label === 'NEG'
+    && sentimiento.confianza >= UMBRAL_CONFIANZA_NEG;
   const crisis =
     (opcionCrisis?.toLowerCase().includes('critico') ?? false) ||
-    (scoreCrisis !== undefined && scoreCrisis >= umbrales.crisis);
+    (scoreCrisis !== undefined && scoreCrisis >= umbrales.crisis) ||
+    (negAlto && scoreCrisis !== undefined && scoreCrisis >= UMBRAL_CRISIS_CON_NEG_ALTO) ||
+    (probabilidadCritica !== undefined && probabilidadCritica >= UMBRAL_PROBABILIDAD_CRITICA);
 
   const probabilidadDominio = leerProbabilidad(answers.fuera_de_dominio);
   const fueraDeDominio =
