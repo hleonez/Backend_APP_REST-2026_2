@@ -28,11 +28,39 @@ const sentimiento = (
 describe('interpretarClef', () => {
   it('no trata un modismo como crisis si el score es bajo', () => {
     const decision = interpretarClef(
-      { alerta_crisis: 0.4, raiz: 'estres_academico', fuera_de_dominio: 0.1 },
-      sentimiento('NEG'),
+      {
+        alerta_crisis: { type: 'score', score: 1.2, probabilities: { '3': 0.03 } },
+        raiz: 'estres_academico',
+        fuera_de_dominio: { type: 'noul', noul: 0.1 },
+      },
+      { ...sentimiento('NEG'), confianza: 0.5 },
     );
     assert.equal(decision.crisis, false);
     assert.equal(decision.raiz, 'estres_academico');
+  });
+
+  it('baja el corte cuando el encoder es NEG con confianza alta', () => {
+    const decision = interpretarClef(
+      { alerta_crisis: { type: 'score', score: 1.3, probabilities: { '3': 0.08 } }, raiz: 'malestar_general' },
+      { ...sentimiento('NEG'), confianza: 0.88 },
+    );
+    assert.equal(decision.crisis, true);
+  });
+  it('marca crisis con el score real de Clef para ideacion', () => {
+    const decision = interpretarClef(
+      { alerta_crisis: { type: 'score', score: 1.88, probabilities: { '3': 0.18 } }, raiz: 'malestar_general' },
+      sentimiento('NEG'),
+    );
+    assert.equal(decision.crisis, true);
+  });
+
+  it('lee el campo noul y desvia una formula academica', () => {
+    const decision = interpretarClef(
+      { fuera_de_dominio: { type: 'noul', noul: 0.847 }, alerta_crisis: { type: 'score', score: 0.04 }, raiz: 'carga_academica_sin_desborde' },
+      sentimiento('NEU'),
+    );
+    assert.equal(decision.fueraDeDominio, true);
+    assert.equal(decision.crisis, false);
   });
 
   it('marca crisis cuando el score llega al nivel crítico', () => {

@@ -23,7 +23,7 @@ then
   exit 1
 fi
 
-MODEL_NAME="qwen3:8b"
+MODEL_NAME="qwen2:1.5b"
 echo "Checking if model $MODEL_NAME is already downloaded..."
 
 MODELS=$(curl -s http://ollama:11434/api/tags 2>/dev/null || echo "")

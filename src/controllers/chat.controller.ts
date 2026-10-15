@@ -159,6 +159,11 @@ const guardarInteraccionIA = async (params: {
    * nunca depende del encoder), el mensaje se guarda sin estos campos.
    */
   sentimientoUsuario?: SentimientoResultado;
+  decisionClef?: {
+    raiz?: string;
+    scoreCrisis?: number;
+    fueraDeDominio: boolean;
+  };
 }) => {
   await db.insert(schema.mensajes_chat).values([
     {
@@ -171,6 +176,13 @@ const guardarInteraccionIA = async (params: {
             sentimiento: params.sentimientoUsuario.label,
             confianza: params.sentimientoUsuario.confianza.toFixed(3),
             sentimiento_scores: params.sentimientoUsuario.scores,
+          }
+        : {}),
+      ...(params.decisionClef
+        ? {
+            clef_raiz: params.decisionClef.raiz,
+            clef_score_crisis: params.decisionClef.scoreCrisis?.toFixed(4),
+            clef_fuera_de_dominio: params.decisionClef.fueraDeDominio,
           }
         : {}),
     },
@@ -353,7 +365,7 @@ export const chatConIAUnificado = async (req: AuthRequest, res: Response): Promi
 
         const respuestaCritica = hayProfesional
           ? 'Gracias por decirme como te sientes. Lo que estas viviendo es importante y no estas solo. Voy a conectarte de inmediato con Salvavidas para que un profesional pueda acompanarte ahora mismo.'
-          : 'Gracias por decirme como te sientes. Lo que estas viviendo es importante y no estas solo. Si necesitas hablar con alguien urgente, por favor contacta a la linea de emergencia 123 (Salvavidas) o acude a la consejeria de tu universidad. Yo estoy aqui para escucharte.';
+          : 'Gracias por decirme como te sientes. Lo que estas viviendo es importante y no estas solo. Si necesitas hablar con alguien urgente, por favor contacta a la linea de emergencia 123 o acude a la consejeria de la Universidad Libre seccional Barranquilla. Yo estoy aqui para escucharte.';
 
         await guardarInteraccionIA({
           chatId: chatIAId,
@@ -361,6 +373,11 @@ export const chatConIAUnificado = async (req: AuthRequest, res: Response): Promi
           mensajeUsuario: mensaje,
           respuestaIA: respuestaCritica,
           sentimientoUsuario: sentimiento,
+          decisionClef: decision.disponible ? {
+            raiz: decision.raiz,
+            scoreCrisis: decision.scoreCrisis,
+            fueraDeDominio: decision.fueraDeDominio,
+          } : undefined,
         });
 
         let escalamiento = { chatId: null as number | null, profesionalId: null as number | null };
@@ -390,7 +407,7 @@ export const chatConIAUnificado = async (req: AuthRequest, res: Response): Promi
           psicologo_asignado_id: escalamiento.profesionalId,
           mensaje_sistema: hayProfesional
             ? 'Detectamos una situacion de riesgo. Ya derivamos tu caso a Salvavidas para atencion profesional.'
-            : 'Detectamos una situacion de riesgo. No hay un profesional disponible en este momento. Por favor contacta a la linea de emergencia 123 (Salvavidas).',
+            : 'Detectamos una situacion de riesgo. No hay un profesional disponible en este momento. Por favor contacta a la linea de emergencia 123 o a Bienestar Universitario de la Universidad Libre seccional Barranquilla.',
         }, 'Chat completado exitosamente'));
         return;
       }
@@ -402,6 +419,11 @@ export const chatConIAUnificado = async (req: AuthRequest, res: Response): Promi
           mensajeUsuario: mensaje,
           respuestaIA: MENSAJE_FUERA_DE_DOMINIO,
           sentimientoUsuario: sentimiento,
+          decisionClef: decision.disponible ? {
+            raiz: decision.raiz,
+            scoreCrisis: decision.scoreCrisis,
+            fueraDeDominio: decision.fueraDeDominio,
+          } : undefined,
         });
 
         res.status(201).json(APISuccessResponse({
@@ -454,7 +476,9 @@ export const chatConIAUnificado = async (req: AuthRequest, res: Response): Promi
       const directriz = decision.disponible && decision.raiz ? directrizDeRaiz(decision.raiz) : undefined;
 
       if (process.env.NODE_ENV !== 'production') {
-        console.log(`[NOA DEBUG] Estilo elegido=${estilo} raiz=${decision.raiz ?? 'sin-clef'} (mensaje #${numeroMensaje})`);
+        console.log(
+          `[NOA DEBUG] Estilo elegido=${estilo} raiz=${decision.raiz ?? 'sin-clef'} crisis=${decision.crisis} score=${decision.scoreCrisis ?? 'n/a'} fuera=${decision.fueraDeDominio} (mensaje #${numeroMensaje})`,
+        );
       }
 
       const contextoParaIA = [
@@ -511,6 +535,11 @@ export const chatConIAUnificado = async (req: AuthRequest, res: Response): Promi
         mensajeUsuario: mensaje,
         respuestaIA: respuestaTexto,
         sentimientoUsuario: sentimiento,
+        decisionClef: decision.disponible ? {
+          raiz: decision.raiz,
+          scoreCrisis: decision.scoreCrisis,
+          fueraDeDominio: decision.fueraDeDominio,
+        } : undefined,
       });
 
       res.status(201).json(APISuccessResponse({
