@@ -12,9 +12,9 @@
  * se caiga por un problema del encoder, pero no es el foco principal de
  * aceptación de esta iteración.
  *
- * Importante: este encoder NO debe usarse como mecanismo de detección de
- * riesgo suicida o crisis. Esa capa (PALABRAS_ALERTA_CRITICA) vive en
- * chat.controller.ts y siempre se evalúa antes y de forma independiente.
+ * Importante: este encoder no decide la crisis. Devuelve label y scores
+ * (NEG, NEU, POS) para que Clef detalle la raíz. Un fallback NEU no
+ * autoriza tratar el mensaje como fuera de dominio.
  */
 
 const SENTIMENT_API_URL = process.env.SENTIMENT_API_URL || 'http://localhost:8000';
