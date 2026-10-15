@@ -10,7 +10,7 @@ services:
       - CORS_ORIGINS=${CORS_ORIGINS:?CORS_ORIGINS is required}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - OLLAMA_API_URL=http://ollama:11434
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen3:8b}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2:1.5b}
       - USE_OLLAMA=true
       - SYSTEM2_PROVIDER=${SYSTEM2_PROVIDER:-ollama}
       - GROQ_API_KEY=${GROQ_API_KEY:-}
@@ -100,7 +100,7 @@ services:
         ATTEMPT=$$((ATTEMPT+1));
         sleep 5;
       done;
-      curl -s http://ollama:11434/api/tags | grep -q 'qwen3:8b' || curl -X POST http://ollama:11434/api/pull -H 'Content-Type: application/json' -d '{\"name\":\"qwen3:8b\"}' --no-buffer;
+      curl -s http://ollama:11434/api/tags | grep -q 'qwen2:1.5b' || curl -X POST http://ollama:11434/api/pull -H 'Content-Type: application/json' -d '{\"name\":\"qwen2:1.5b\"}' --no-buffer;
       echo 'Ollama ready';
       "
     networks:

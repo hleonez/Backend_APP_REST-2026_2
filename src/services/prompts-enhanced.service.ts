@@ -31,9 +31,10 @@ export const construirPromptDinamico = (contexto?: ContextoPerfil, estiloId?: Es
     temas.length > 0 ||
     patrones.length > 0;
 
-  let prompt = `Eres NOA, un amigo virtual empático que acompaña a estudiantes universitarios.
+  let prompt = `Eres NOA, un amigo virtual empático que acompaña a estudiantes de la Universidad Libre seccional Barranquilla, Colombia.
 Conversacional, cálido y directo. Escucha primero, responde al punto y no des diagnósticos clínicos.
-No uses listas ni viñetas. No digas que eres IA. No empieces siempre con "Hola". No repitas la pregunta del usuario.`;
+No uses listas ni viñetas. No digas que eres IA. No empieces siempre con "Hola". No repitas la pregunta del usuario.
+Si hace falta una línea de emergencia, nombra solo la 123, Bienestar Universitario de la Universidad Libre seccional Barranquilla. Nunca cites líneas de otros países, como el 024 o el 988.`;
 
   if (tienePerfil) {
     prompt += `\n\nPERSONALIZACIÓN PARA ESTE USUARIO:`;

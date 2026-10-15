@@ -1,5 +1,5 @@
 #!/bin/sh
-# Checklist de validación NOA en Hostinger KVM8 (qwen3:8b).
+# Checklist de validación NOA en Hostinger KVM8 (qwen2:1.5b).
 # Uso: OLLAMA_HOST=http://127.0.0.1:11434 ./scripts/verify-noa-kvm8.sh
 
 set -eu
@@ -7,12 +7,12 @@ set -eu
 OLLAMA_HOST="${OLLAMA_HOST:-http://127.0.0.1:11434}"
 FAIL=0
 
-echo "=== 1. Modelo qwen3:8b cargado ==="
+echo "=== 1. Modelo qwen2:1.5b cargado ==="
 TAGS=$(curl -sf "${OLLAMA_HOST}/api/tags" || true)
-if echo "$TAGS" | grep -q 'qwen3:8b'; then
-  echo "OK: qwen3:8b está en /api/tags"
+if echo "$TAGS" | grep -q 'qwen2:1.5b'; then
+  echo "OK: qwen2:1.5b está en /api/tags"
 else
-  echo "FAIL: no aparece qwen3:8b. Ejecuta: ollama pull qwen3:8b"
+  echo "FAIL: no aparece qwen2:1.5b. Ejecuta: ollama pull qwen2:1.5b"
   FAIL=1
 fi
 
@@ -30,7 +30,7 @@ echo "=== 3. Inferencia en caliente (P90 < 15s objetivo) ==="
 START=$(date +%s)
 if curl -sf "${OLLAMA_HOST}/api/chat" \
   -H 'Content-Type: application/json' \
-  -d '{"model":"qwen3:8b","stream":false,"think":false,"keep_alive":"30m","options":{"num_ctx":4096,"num_thread":6,"num_predict":40},"messages":[{"role":"user","content":"Responde en una frase: hola"}]}' \
+  -d '{"model":"qwen2:1.5b","stream":false,"think":false,"keep_alive":"30m","options":{"num_ctx":4096,"num_thread":6,"num_predict":40},"messages":[{"role":"user","content":"Responde en una frase: hola"}]}' \
   >/tmp/noa-ollama-smoke.json 2>/dev/null; then
   END=$(date +%s)
   echo "OK: respuesta en $((END - START))s"
