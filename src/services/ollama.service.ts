@@ -1,3 +1,4 @@
+import { anexarDirectriz } from './clef-decision';
 import { construirPromptDinamico, construirPromptFinal, generarRespuestaFallbackNatural, esRespuestaAceptable } from './prompts-enhanced.service';
 import { analizarPatronesEmocionales, type PerfilEmocional } from './user-profile.service';
 import type { EstiloRespuestaId } from '../shared/const/estilos-respuesta.const';
@@ -689,6 +690,8 @@ export const chatWithOllama = async (params: {
   perfil?: PerfilEmocional;
   /** Últimos turnos del chat IA, sin el mensaje actual. */
   historial?: OllamaChatMessage[];
+  /** Bloque de Clef. Se anexa al system prompt; no reemplaza la identidad de NOA. */
+  directriz?: string;
 }): Promise<ChatResponse> => {
   const {
     mensaje,
@@ -698,6 +701,7 @@ export const chatWithOllama = async (params: {
     estilo = 'conversacion_neutral',
     perfil: perfilParam,
     historial = [],
+    directriz,
   } = params;
 
   try {
@@ -728,7 +732,7 @@ export const chatWithOllama = async (params: {
       };
     }
 
-    const systemPrompt = construirPromptDinamico(perfilContexto, estilo);
+    const systemPrompt = anexarDirectriz(construirPromptDinamico(perfilContexto, estilo), directriz);
     const prompts = construirPromptFinal(mensaje, systemPrompt, estilo, numeroMensaje, contexto);
 
     if (process.env.NODE_ENV !== 'production') {
