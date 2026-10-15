@@ -91,7 +91,7 @@ const hayRegistroEmocionalPendiente = (ultimosRegistros?: unknown[] | null): boo
  * estilo (ver `prompts-enhanced.service.ts`).
  *
  * El encoder de sentimiento NUNCA decide una derivación por crisis; esa
- * responsabilidad es exclusiva de `detectarAlertaCritica` en
+ * responsabilidad es de Clef (`alerta_crisis`) en
  * chat.controller.ts, evaluada antes de llegar a este selector.
  */
 export const elegirEstilo = (params: ElegirEstiloParams): EstiloRespuestaId => {
