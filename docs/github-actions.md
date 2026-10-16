@@ -11,24 +11,20 @@ protegidas).
 ```
 feature/*  -->  develop   (Pull Request normal, validado por CI + Branch Policy)
 develop    -->  main      (Pull Request normal, release)
-main       -->  develop   (EXCEPCIÓN: PR automático creado por
-                            sync-develop.yml, autor github-actions[bot],
-                            que se autofusiona -auto-merge- solo)
+main       -->  develop   (fast-forward de sync-develop.yml;
+                            develop pasa a apuntar al commit de main)
 ```
 
 Reglas:
-- Nadie hace push directo a `main` ni a `develop`; todo pasa por Pull
-  Request, incluida la sincronización `main -> develop`.
+- Nadie hace push directo a `main`. A `develop` solo entran PRs desde
+  `feature/*`, más el fast-forward del workflow de sincronización.
 - Todo el trabajo nuevo se hace en una rama `feature/<nombre>` creada desde
   `develop`.
 - `main` solo se actualiza mediante un PR desde `develop`.
-- `develop` solo se actualiza mediante PRs desde `feature/*`, o mediante el
-  PR automático `main -> develop` que abre el workflow de sincronización
-  después de cada merge a `main`. Ese PR de sync se fusiona solo (auto-merge)
-  en cuanto pasan los checks obligatorios, sin que nadie tenga que hacer
-  clic, y siempre con un **merge commit real** (nunca squash/rebase), para
-  que `main` quede como ancestro directo de `develop` y el historial no se
-  reescriba.
+- Después de cada merge a `main`, `sync-develop.yml` adelanta `develop`
+  hasta ese mismo commit (`git push origin HEAD:develop`) si `develop` es
+  ancestro de `main`. No abre un PR y no usa `--force`. Si `develop` tiene
+  commits que `main` no tiene, el job falla y el historial no se reescribe.
 
 ## Workflows incluidos
 
@@ -42,38 +38,30 @@ Corre en cada `pull_request` cuyo destino (`base`) sea `main` o `develop`.
 Bloquea el check si la combinación origen/destino no respeta la convención:
 - Hacia `main`: solo se permite `head = develop`.
 - Hacia `develop`: solo se permite `head` que empiece por `feature/`, o
-  `head = main` **y** que el autor del PR sea `github-actions[bot]` (el PR
-  automático de sync).
+  `head = main` y autor `github-actions[bot]`. El sync ya no abre ese PR;
+  la excepción sigue en el check.
 
 Este check debe marcarse como **obligatorio** en la protección de rama (ver
 más abajo) para que realmente bloquee el merge.
 
 ### 3. [`.github/workflows/sync-develop.yml`](../.github/workflows/sync-develop.yml)
 Corre en cada `push` a `main` (es decir, después de aceptar el PR
-`develop -> main`). Compara `origin/main` con `origin/develop`:
-- Si no hay diferencias, no hace nada.
-- Si hay diferencias y no existe ya un PR abierto `main -> develop`, crea uno
-  nuevo con `gh pr create`.
-- Si ya existe un PR abierto `main -> develop`, no crea uno duplicado (el PR
-  existente se actualiza solo, porque GitHub sigue el estado de la rama
-  `main`).
-- En cualquiera de los dos casos anteriores, activa **auto-merge** en ese
-  PR con `gh pr merge --auto --merge` (merge commit real, nunca squash). En
-  cuanto los checks obligatorios (`CI`, `Branch Policy`) pasan, GitHub lo
-  fusiona solo, sin intervención manual.
+`develop -> main`) y también con `workflow_dispatch`. Comprueba si
+`origin/develop` es ancestro de `HEAD` (el commit recién llegado a `main`):
+- Si lo es, hace fast-forward: `git push origin HEAD:develop`. `develop` y
+  `main` quedan en el mismo commit. Un merge commit sin cambios de archivos
+  también se adelanta; un `git diff` de árboles lo habría saltado.
+- Si no lo es, el job falla. `develop` tiene commits que `main` no tiene y
+  un push normal no es fast-forward. No se usa `--force`.
 
-Este mecanismo **no reescribe historia**: es un merge normal, no un reset
-ni un force-push. Esto es intencional y no es solo preferencia — si en vez
-de esto se hiciera un `git push --force` de `main` sobre `develop`,
-cualquier colaborador que ya tenga una rama `feature/*` en curso (creada
-desde el `develop` anterior) o un `develop` local desactualizado se
-encontraría con diffs falsos, conflictos sin sentido, o un `git pull` que
-falla por "diverged history". Con el enfoque de PR + auto-merge esto nunca
-pasa: el historial de `develop` sigue creciendo de forma lineal y compatible
-con cualquier rama que ya exista.
+Eso no reescribe historia. Un `git push --force` de `main` sobre `develop`
+borraría el trabajo que solo está en `develop` y rompería las ramas
+`feature/*` creadas desde el `develop` anterior.
 
-También se puede disparar manualmente desde la pestaña **Actions** con
-`workflow_dispatch` para probarlo sin necesidad de esperar un push a `main`.
+El archivo de workflow que corre es el de `main`. Después de mergear este
+cambio hasta `main`, un `workflow_dispatch` solo adelanta `develop` si en
+ese momento `develop` ya es ancestro de `main`. Si `develop` va por delante
+con commits que todavía no se han liberado, el job falla a propósito.
 
 ## Guía de activación (paso a paso en GitHub)
 
@@ -85,23 +73,25 @@ También se puede disparar manualmente desde la pestaña **Actions** con
    hace `gh`, que ya viene preinstalado en los runners de GitHub).
 3. Guarda los cambios.
 
-### 2. Permitir que Actions abra Pull Requests
-Este paso es el que más se suele olvidar y hace fallar `sync-develop.yml`
-con un error de permisos al ejecutar `gh pr create`:
+### 2. Dar permiso de escritura al token de Actions
+El fast-forward lo hace `git push` con el `GITHUB_TOKEN` del workflow:
 1. En la misma página, baja hasta **Workflow permissions**.
 2. Selecciona **Read and write permissions**.
-3. Marca la casilla **Allow GitHub Actions to create and approve pull
-   requests**.
-4. Guarda los cambios.
+3. Guarda los cambios.
 
-### 3. Activar auto-merge en el repositorio
-Requisito para que `gh pr merge --auto` funcione en `sync-develop.yml`:
-1. Ve a **Settings -> General**.
-2. Baja hasta la sección **Pull Requests**.
-3. Marca la casilla **Allow auto-merge**.
-4. (Opcional, no obligatorio) Marca también **Automatically delete head
-   branches** para mantener limpio el repo tras cada merge.
-5. Guarda los cambios.
+El workflow ya declara `permissions: contents: write`. Sin escritura en el
+repositorio, el push a `develop` se rechaza.
+
+### 3. Dejar que Actions actualice `develop`
+`develop` puede seguir exigiendo Pull Request para las personas. El sync no
+abre un PR: empuja el fast-forward. Si la protección dice "Require a pull
+request" y no hay bypass, GitHub rechaza el push aunque el token tenga
+`contents: write`.
+1. En la regla o ruleset de `develop`, agrega un bypass para el actor
+   **GitHub Actions** (`github-actions[bot]`), limitado a lo que haga falta
+   para actualizar esa rama.
+2. No des ese bypass en `main`. `main` sigue aceptando solo PRs desde
+   `develop`.
 
 ### 4. Ejecutar un primer PR de prueba (para que los checks aparezcan)
 Antes de poder marcar los checks como obligatorios en la protección de
@@ -120,9 +110,8 @@ rama, GitHub necesita haberlos visto correr al menos una vez:
 2. **Branch name pattern**: `main`.
 3. Activa **Require a pull request before merging**.
    - Aquí sí puedes activar **Require approvals** (por ejemplo, 1) si
-     quieres que alguien revise antes de mergear a `main`. El bot nunca
-     abre PRs hacia `main` (solo hacia `develop`), así que esto no
-     interfiere con la automatización.
+     quieres que alguien revise antes de mergear a `main`. El sync no abre
+     PRs; solo adelanta `develop`.
 4. Activa **Require status checks to pass before merging** y selecciona:
    - `CI / Instalar dependencias y compilar`
    - `Branch Policy / Validar origen/destino del PR`
@@ -131,55 +120,41 @@ rama, GitHub necesita haberlos visto correr al menos una vez:
 6. Guarda la regla.
 
 ### 6. Proteger la rama `develop`
-Repite el paso 5 con **Branch name pattern**: `develop`, con los mismos
-checks obligatorios, pero con una diferencia importante:
+Repite el paso 5 con **Branch name pattern**: `develop` y los mismos checks
+obligatorios para los PRs de `feature/*`.
 
-- **NO actives "Require approvals" en `develop`** (o déjalo en 0). El PR de
-  sincronización `main -> develop` lo abre `github-actions[bot]` y necesita
-  auto-fusionarse (auto-merge) sin que un humano lo apruebe a mano. Si
-  exiges aprobación aquí, el auto-merge se queda esperando esa aprobación
-  indefinidamente y la sincronización automática deja de funcionar.
-- El resto de PRs hacia `develop` (los de `feature/*`) sí pasan igual por
-  `CI` y `Branch Policy` como checks obligatorios; simplemente no exigen
-  una aprobación humana adicional a nivel de rama.
+- Agrega el bypass de **GitHub Actions** descrito en el paso 3. Sin ese
+  bypass, el fast-forward de `sync-develop.yml` no puede actualizar
+  `develop`.
+- Los PRs de personas hacia `develop` siguen pasando por `CI` y
+  `Branch Policy`.
 
-Con esto, ni `main` ni `develop` aceptan push directo: todo pasa por PR, y
-`branch-policy.yml` bloquea cualquier PR que no siga la convención
-(`feature/*  -> develop`, `develop -> main`, o el PR automático
-`main -> develop`).
+`branch-policy.yml` sigue bloqueando PRs que no sean `feature/* -> develop`
+o `develop -> main`. El sync ya no usa un PR `main -> develop`.
 
 ### 7. Probar el ciclo completo
 1. Fusiona un PR `feature/algo -> develop` (debe pasar CI + Branch Policy).
 2. Abre y fusiona un PR `develop -> main` (debe pasar CI + Branch Policy).
-3. Ve a la pestaña **Actions** y confirma que se disparó el workflow
-   **Sync main -> develop**.
-4. Si había diferencias, debe existir un nuevo Pull Request `main -> develop`,
-   creado por `github-actions[bot]`, con auto-merge activado.
-5. En cuanto sus checks (`CI`, `Branch Policy`) pasen, ese PR se fusiona
-   solo — no hace falta revisarlo ni hacer clic en nada. `develop` queda
-   igual a `main` mediante un merge commit normal (no se reescribe
-   historia).
+3. Ve a la pestaña **Actions** y confirma que se disparó
+   **Sync develop with main**.
+4. Si en ese momento `develop` era ancestro de `main`, `develop` queda en
+   el mismo commit que `main`. No aparece un PR de sync.
+5. Si `develop` tenía commits que `main` no tiene, el job falla y `develop`
+   no se mueve. No hay force-push. Hay que fusionar `develop` a `main`
+   primero, en un release, y el siguiente sync sí puede adelantar.
 
 ## Solución de problemas
 
-- **`gh pr create` falla con "GitHub Actions is not permitted to create or
-  approve pull requests"**: falta activar la casilla del paso 2
-  (*Allow GitHub Actions to create and approve pull requests*).
 - **El check "Branch Policy" no aparece en la lista de checks obligatorios
   al configurar la protección de rama**: debe ejecutarse al menos una vez
   (paso 4) antes de que GitHub lo ofrezca como opción seleccionable.
-- **El PR de sync no se crea a pesar de haber diferencias**: revisa los
-  logs del job `sync-pr` en la pestaña Actions; el paso "Verificar si
-  develop ya está al día con main" imprime el resultado de la comparación
-  (`has_diff=true/false`).
+- **El push a `develop` se rechaza por protección de rama**: falta el bypass
+  de GitHub Actions en `develop` (paso 3). El token tiene `contents: write`,
+  pero una regla "Require a pull request" sin bypass bloquea igual el
+  fast-forward.
+- **El job falla con "develop tiene commits que main no tiene"**: no es un
+  fast-forward. El log imprime el SHA de `HEAD` y el de `origin/develop`.
+  No se reescribe `develop`. Fusiona primero `develop` en `main`.
 - **Un PR legítimo es bloqueado por Branch Policy**: revisa el mensaje del
   job, que imprime explícitamente la rama origen, la rama destino y (si
   aplica) el autor, e indica por qué combinación no está permitida.
-- **`gh pr merge --auto` falla con un error sobre auto-merge no permitido**:
-  falta activar la casilla **Allow auto-merge** del paso 3 (Settings ->
-  General -> Pull Requests). El workflow se puede volver a disparar con
-  `workflow_dispatch` una vez activada, sin esperar otro push a `main`.
-- **El PR de sincronización se queda abierto sin fusionarse aunque los
-  checks pasaron**: revisa si `develop` tiene "Require approvals" activado
-  en su protección de rama (paso 6). Si es así, quítalo o el auto-merge se
-  queda esperando una aprobación humana que nunca llega para el PR del bot.
