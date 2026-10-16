@@ -9,6 +9,15 @@ import { APISuccessResponse, APIErrorResponse } from '../shared/utils/api.utils'
 import { analizarSentimiento, type SentimientoResultado } from '../services/sentimiento.service';
 import { elegirEstilo } from '../services/selector-estilo.service';
 import { construirContextoBienestar } from '../services/contexto-bienestar.service';
+import { clasificarConClef } from '../services/clef.service';
+import {
+  anexarDirectriz,
+  directrizDeRaiz,
+  estiloParaRaiz,
+  MENSAJE_FUERA_DE_DOMINIO,
+} from '../services/clef-decision';
+import { construirPromptDinamico, construirPromptFinal } from '../services/prompts-enhanced.service';
+import { generarConSistema2, mensajesParaSistema2, proveedorSistema2 } from '../services/system2.service';
 
 // Validation schema for messages
 const mensajeSchema = z.object({
@@ -20,121 +29,6 @@ const chatIASchema = z.object({
   mensaje: z.string().min(1, 'El mensaje no puede estar vacío'),
   contexto: z.string().optional()
 });
-
-const PALABRAS_ALERTA_CRITICA = [
-  // Suicidio
-  'suicid',
-  'suicidio',
-  'suicidarme',
-  'me suicidio',
-  'voy a suicidarme',
-  'me voy a suicidar',
-  'quiero suicidarme',
-  'voy a suicidar',
-  
-  // Quitarse la vida
-  'quitarme la vida',
-  'me quiero quitar la vida',
-  'no quiero vivir',
-  'ya no quiero vivir',
-  'prefiero no vivir',
-  'no vale la pena vivir',
-  
-  // Matarse
-  'matarme',
-  'me voy a matar',
-  'voy a matar',
-  'me quiero matar',
-  'quiero matar',
-  'me voy a matar',
-  'me estoy matando',
-  
-  // Autolesiones
-  'autoles',
-  'autolesion',
-  'autolesionarme',
-  'me autolesiono',
-  'voy a autolesionarme',
-  'quiero autolesionarme',
-  
-  // Hacerse daño
-  'hacerme dano',
-  'hacerme daño',
-  'me quiero hacer daño',
-  'voy a hacerme daño',
-  'quiero hacerme daño',
-  'me voy a hacer daño',
-  'me estoy haciendo daño',
-  
-  // Lastimarse
-  'lastimarme',
-  'me quiero lastimar',
-  'voy a lastimarme',
-  'quiero lastimarme',
-  'lastimarme a mi mismo',
-  'me voy a lastimar',
-  
-  // Cortarse
-  'cortarme',
-  'me quiero cortar',
-  'voy a cortar',
-  'quiero cortar',
-  'me voy a cortar',
-  'me estoy cortando',
-  'cortes',
-  'cortarme las venas',
-  
-  // Sobredosis/Drogas
-  'sobredosis',
-  'voy a overdosear',
-  'quiero overdosear',
-  'me quiero overdosear',
-  
-  // Desaparecer
-  'me quiero desaparecer',
-  'quiero desaparecer',
-  'desaparecer',
-  'me voy a desaparecer',
-  'me quiero ir y no volver',
-  'quiero no existir',
-  
-  // Morir/Muerte
-  'me quiero morir',
-  'quiero morir',
-  'voy a morir',
-  'me voy a morir',
-  'solo quiero morir',
-  'me estoy muriendo',
-  'necesito morir',
-  
-  // Crisis extrema
-  'sin salida',
-  'no hay salida',
-  'crisis',
-  'crisis emocional',
-  'crisis depresiva',
-  'quiero acabar con esto',
-  'necesito que termine todo',
-  
-  // No aguanta más
-  'no aguanto mas',
-  'no aguanto más',
-  'no aguanto',
-  'no puedo mas',
-  'no puedo más',
-  'no puedo',
-  'no aguanto la vida',
-  'no puedo seguir asi',
-  'no puedo seguir así',
-  
-  // Desesperación
-  'estoy desesperado',
-  'me siento desesperado',
-  'esto es insoportable',
-  'no soporto mas',
-  'no soporto más',
-  'no soporto vivir',
-];
 
 const normalizarTexto = (texto: string) =>
   texto
@@ -195,18 +89,6 @@ const obtenerHistorialReciente = async (chatId: number, limit: number = 6): Prom
 const normalizarSemaforo = (valor?: string | null): 'verde' | 'amarillo' | 'rojo' | undefined =>
   valor === 'verde' || valor === 'amarillo' || valor === 'rojo' ? valor : undefined;
 
-const detectarAlertaCritica = (mensaje: string) => {
-  const mensajeNormalizado = normalizarTexto(mensaje);
-  const coincidencias = PALABRAS_ALERTA_CRITICA.filter((palabra) =>
-    mensajeNormalizado.includes(palabra),
-  );
-
-  return {
-    esCritico: coincidencias.length > 0,
-    nivel: coincidencias.length > 1 ? 'critico' : coincidencias.length === 1 ? 'alto' : 'normal',
-    coincidencias,
-  };
-};
 
 const getOrCreateIAChat = async (usuarioId: number): Promise<number> => {
   const [chatActivo] = await db
@@ -242,7 +124,7 @@ const getOrCreateIAChat = async (usuarioId: number): Promise<number> => {
   return creado.id;
 };
 
-const MAX_TURNOS_HISTORIAL_IA = 8;
+const MAX_TURNOS_HISTORIAL_IA = 4;
 
 const getRecentIAChatTurns = async (
   chatId: number,
@@ -277,6 +159,11 @@ const guardarInteraccionIA = async (params: {
    * nunca depende del encoder), el mensaje se guarda sin estos campos.
    */
   sentimientoUsuario?: SentimientoResultado;
+  decisionClef?: {
+    raiz?: string;
+    scoreCrisis?: number;
+    fueraDeDominio: boolean;
+  };
 }) => {
   await db.insert(schema.mensajes_chat).values([
     {
@@ -289,6 +176,13 @@ const guardarInteraccionIA = async (params: {
             sentimiento: params.sentimientoUsuario.label,
             confianza: params.sentimientoUsuario.confianza.toFixed(3),
             sentimiento_scores: params.sentimientoUsuario.scores,
+          }
+        : {}),
+      ...(params.decisionClef
+        ? {
+            clef_raiz: params.decisionClef.raiz,
+            clef_score_crisis: params.decisionClef.scoreCrisis?.toFixed(4),
+            clef_fuera_de_dominio: params.decisionClef.fueraDeDominio,
           }
         : {}),
     },
@@ -459,63 +353,103 @@ export const chatConIAUnificado = async (req: AuthRequest, res: Response): Promi
     }
 
     const { mensaje } = validationResult.data;
-    const alerta = detectarAlertaCritica(mensaje);
     const chatIAId = await getOrCreateIAChat(req.user.id);
 
-    if (alerta.esCritico) {
-      const profesionalId = await buscarProfesionalSalvavidas();
-      const hayProfesional = profesionalId !== null;
+    try {
+      const sentimiento = await analizarSentimiento(mensaje);
+      const decision = await clasificarConClef(mensaje, sentimiento);
 
-      const respuestaCritica = hayProfesional
-        ? 'Gracias por decirme como te sientes. Lo que estas viviendo es importante y no estas solo. Voy a conectarte de inmediato con Salvavidas para que un profesional pueda acompanarte ahora mismo.'
-        : 'Gracias por decirme como te sientes. Lo que estas viviendo es importante y no estas solo. Si necesitas hablar con alguien urgente, por favor contacta a la linea de emergencia 123 (Salvavidas) o acude a la consejeria de tu universidad. Yo estoy aqui para escucharte.';
+      if (decision.crisis) {
+        const profesionalId = await buscarProfesionalSalvavidas();
+        const hayProfesional = profesionalId !== null;
 
-      await guardarInteraccionIA({
-        chatId: chatIAId,
-        usuarioId: req.user.id,
-        mensajeUsuario: mensaje,
-        respuestaIA: respuestaCritica,
-      });
+        const respuestaCritica = hayProfesional
+          ? 'Gracias por decirme como te sientes. Lo que estas viviendo es importante y no estas solo. Voy a conectarte de inmediato con Salvavidas para que un profesional pueda acompanarte ahora mismo.'
+          : 'Gracias por decirme como te sientes. Lo que estas viviendo es importante y no estas solo. Si necesitas hablar con alguien urgente, por favor contacta a la linea de emergencia 123 o acude a la consejeria de la Universidad Libre seccional Barranquilla. Yo estoy aqui para escucharte.';
 
-      let escalamiento = { chatId: null as number | null, profesionalId: null as number | null };
-      if (hayProfesional) {
-        escalamiento = await escalarASalvavidas({
+        await guardarInteraccionIA({
+          chatId: chatIAId,
           usuarioId: req.user.id,
           mensajeUsuario: mensaje,
           respuestaIA: respuestaCritica,
-          profesionalId,
+          sentimientoUsuario: sentimiento,
+          decisionClef: decision.disponible ? {
+            raiz: decision.raiz,
+            scoreCrisis: decision.scoreCrisis,
+            fueraDeDominio: decision.fueraDeDominio,
+          } : undefined,
         });
-      } else {
-        console.warn('[SALVAVIDAS] No hay profesional disponible para escalar caso critico del usuario', req.user.id);
+
+        let escalamiento = { chatId: null as number | null, profesionalId: null as number | null };
+        if (hayProfesional) {
+          escalamiento = await escalarASalvavidas({
+            usuarioId: req.user.id,
+            mensajeUsuario: mensaje,
+            respuestaIA: respuestaCritica,
+            profesionalId,
+          });
+        } else {
+          console.warn('[SALVAVIDAS] No hay profesional disponible para escalar caso critico del usuario', req.user.id);
+        }
+
+        res.status(201).json(APISuccessResponse({
+          usuario_id: req.user.id,
+          chat_id: chatIAId,
+          mensaje_usuario: mensaje,
+          respuesta_ia: respuestaCritica,
+          timestamp: new Date().toISOString(),
+          requiere_salvavidas: hayProfesional,
+          nivel_alerta: 'critico',
+          coincidencias_alerta: [],
+          categoria: decision.raiz ?? null,
+          proveedor: 'ninguno',
+          chat_salvavidas_id: escalamiento.chatId,
+          psicologo_asignado_id: escalamiento.profesionalId,
+          mensaje_sistema: hayProfesional
+            ? 'Detectamos una situacion de riesgo. Ya derivamos tu caso a Salvavidas para atencion profesional.'
+            : 'Detectamos una situacion de riesgo. No hay un profesional disponible en este momento. Por favor contacta a la linea de emergencia 123 o a Bienestar Universitario de la Universidad Libre seccional Barranquilla.',
+        }, 'Chat completado exitosamente'));
+        return;
       }
 
-      res.status(201).json(APISuccessResponse({
-        usuario_id: req.user.id,
-        chat_id: chatIAId,
-        mensaje_usuario: mensaje,
-        respuesta_ia: respuestaCritica,
-        timestamp: new Date().toISOString(),
-        requiere_salvavidas: hayProfesional,
-        nivel_alerta: alerta.nivel,
-        coincidencias_alerta: alerta.coincidencias,
-        chat_salvavidas_id: escalamiento.chatId,
-        psicologo_asignado_id: escalamiento.profesionalId,
-        mensaje_sistema: hayProfesional
-          ? 'Detectamos una situacion de riesgo. Ya derivamos tu caso a Salvavidas para atencion profesional.'
-          : 'Detectamos una situacion de riesgo. No hay un profesional disponible en este momento. Por favor contacta a la linea de emergencia 123 (Salvavidas).',
-      }, 'Chat completado exitosamente'));
-      return;
-    }
+      if (decision.fueraDeDominio) {
+        await guardarInteraccionIA({
+          chatId: chatIAId,
+          usuarioId: req.user.id,
+          mensajeUsuario: mensaje,
+          respuestaIA: MENSAJE_FUERA_DE_DOMINIO,
+          sentimientoUsuario: sentimiento,
+          decisionClef: decision.disponible ? {
+            raiz: decision.raiz,
+            scoreCrisis: decision.scoreCrisis,
+            fueraDeDominio: decision.fueraDeDominio,
+          } : undefined,
+        });
 
-    try {
+        res.status(201).json(APISuccessResponse({
+          usuario_id: req.user.id,
+          chat_id: chatIAId,
+          mensaje_usuario: mensaje,
+          respuesta_ia: MENSAJE_FUERA_DE_DOMINIO,
+          timestamp: new Date().toISOString(),
+          requiere_salvavidas: false,
+          nivel_alerta: 'normal',
+          coincidencias_alerta: [],
+          categoria: null,
+          proveedor: 'ninguno',
+          chat_salvavidas_id: null,
+          psicologo_asignado_id: null,
+          mensaje_sistema: null,
+        }, 'Chat completado exitosamente'));
+        return;
+      }
+
       const totalMensajesChat = await db
         .select({ id: schema.mensajes_chat.id })
         .from(schema.mensajes_chat)
         .where(eq(schema.mensajes_chat.chat_id, chatIAId));
       const numeroMensaje = totalMensajesChat.length;
       const modo = detectarModoProfundo(mensaje) ? 'profundo' : 'normal';
-
-      const sentimiento = await analizarSentimiento(mensaje);
 
       if (process.env.NODE_ENV !== 'production') {
         console.log(
@@ -524,7 +458,7 @@ export const chatConIAUnificado = async (req: AuthRequest, res: Response): Promi
       }
 
       const contextoBienestar = await construirContextoBienestar(req.user.id);
-      const estilo = elegirEstilo({
+      const estiloBase = elegirEstilo({
         sentimiento: { label: sentimiento.label, confianza: sentimiento.confianza },
         semaforo: contextoBienestar.datos.semaforo_actual?.color,
         subcategoria: contextoBienestar.datos.semaforo_actual?.subcategoria,
@@ -538,9 +472,13 @@ export const chatConIAUnificado = async (req: AuthRequest, res: Response): Promi
         ultimosRegistros: contextoBienestar.datos.registro_7d,
         onboarding: contextoBienestar.datos.onboarding_base.length === 0,
       });
+      const estilo = decision.raiz ? estiloParaRaiz(decision.raiz, estiloBase) : estiloBase;
+      const directriz = decision.disponible && decision.raiz ? directrizDeRaiz(decision.raiz) : undefined;
 
       if (process.env.NODE_ENV !== 'production') {
-        console.log(`[NOA DEBUG] Estilo elegido=${estilo} (mensaje #${numeroMensaje})`);
+        console.log(
+          `[NOA DEBUG] Estilo elegido=${estilo} raiz=${decision.raiz ?? 'sin-clef'} crisis=${decision.crisis} score=${decision.scoreCrisis ?? 'n/a'} fuera=${decision.fueraDeDominio} (mensaje #${numeroMensaje})`,
+        );
       }
 
       const contextoParaIA = [
@@ -551,39 +489,70 @@ export const chatConIAUnificado = async (req: AuthRequest, res: Response): Promi
       const userId = req.user.id;
       const historial = await getRecentIAChatTurns(chatIAId, userId);
 
-      const respuestaIA = await Promise.race([
-        chatWithOllama({
-          mensaje,
-          contexto: contextoParaIA,
-          modo,
-          numeroMensaje,
-          estilo,
-          userId,
-          perfil: contextoBienestar.datos.perfil_emocional,
-          historial,
-        }),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout')), 120000)
-        )
-      ]) as any;
+      const perfil = contextoBienestar.datos.perfil_emocional;
+      let respuestaTexto = '';
+      let proveedor: 'ollama' | 'groq' | 'openrouter' = 'ollama';
+      let timestamp = new Date().toISOString();
+
+      if (proveedorSistema2() === 'groq') {
+        const system = anexarDirectriz(construirPromptDinamico({
+          emociones_frecuentes: perfil.emociones_frecuentes,
+          temas_recurrentes: perfil.temas_recurrentes,
+          patrones: perfil.patrones_comportamiento,
+          dias_sin_comunicacion: perfil.dias_sin_comunicacion,
+          tiene_historial: perfil.emociones_frecuentes.length > 0,
+        }, estilo), directriz);
+        const prompts = construirPromptFinal(mensaje, system, estilo, numeroMensaje, contextoParaIA);
+        const generado = await generarConSistema2(
+          mensajesParaSistema2(prompts.system, historial, prompts.user),
+        );
+        respuestaTexto = generado.texto;
+        proveedor = generado.proveedor;
+      } else {
+        const respuestaIA = await Promise.race([
+          chatWithOllama({
+            mensaje,
+            contexto: contextoParaIA,
+            modo,
+            numeroMensaje,
+            estilo,
+            userId,
+            perfil,
+            historial,
+            directriz,
+          }),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Timeout')), 120000)
+          )
+        ]) as { respuesta: string; timestamp: string };
+        respuestaTexto = respuestaIA.respuesta;
+        timestamp = respuestaIA.timestamp;
+      }
 
       await guardarInteraccionIA({
         chatId: chatIAId,
         usuarioId: req.user.id,
         mensajeUsuario: mensaje,
-        respuestaIA: respuestaIA.respuesta,
+        respuestaIA: respuestaTexto,
         sentimientoUsuario: sentimiento,
+        decisionClef: decision.disponible ? {
+          raiz: decision.raiz,
+          scoreCrisis: decision.scoreCrisis,
+          fueraDeDominio: decision.fueraDeDominio,
+        } : undefined,
       });
 
       res.status(201).json(APISuccessResponse({
         usuario_id: req.user.id,
         chat_id: chatIAId,
         mensaje_usuario: mensaje,
-        respuesta_ia: respuestaIA.respuesta,
-        timestamp: respuestaIA.timestamp,
+        respuesta_ia: respuestaTexto,
+        timestamp,
         requiere_salvavidas: false,
         nivel_alerta: 'normal',
         coincidencias_alerta: [],
+        categoria: decision.raiz ?? null,
+        proveedor,
         chat_salvavidas_id: null,
         psicologo_asignado_id: null,
         mensaje_sistema: null,

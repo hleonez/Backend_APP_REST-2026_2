@@ -10,8 +10,15 @@ services:
       - CORS_ORIGINS=${CORS_ORIGINS:?CORS_ORIGINS is required}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - OLLAMA_API_URL=http://ollama:11434
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen3:8b}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2:1.5b}
       - USE_OLLAMA=true
+      - SYSTEM2_PROVIDER=${SYSTEM2_PROVIDER:-ollama}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - GROQ_MODEL=${GROQ_MODEL:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL:-}
+      - CLOUDFLARE_ACCOUNT_ID=${CLOUDFLARE_ACCOUNT_ID:-}
+      - CLOUDFLARE_AUTH_TOKEN=${CLOUDFLARE_AUTH_TOKEN:-}
       - SENTIMENT_API_URL=${SENTIMENT_API_URL:-http://sentiment:8000}
       - PORT=3000
     depends_on:
@@ -43,6 +50,8 @@ services:
     networks:
       - app-network
 
+  # Permanece encendido mientras SYSTEM2_PROVIDER sea ollama. Se puede parar
+  # despues de probar Groq y el fallback de OpenRouter.
   ollama:
     image: ollama/ollama:latest
     ports:
@@ -91,7 +100,7 @@ services:
         ATTEMPT=$$((ATTEMPT+1));
         sleep 5;
       done;
-      curl -s http://ollama:11434/api/tags | grep -q 'qwen3:8b' || curl -X POST http://ollama:11434/api/pull -H 'Content-Type: application/json' -d '{\"name\":\"qwen3:8b\"}' --no-buffer;
+      curl -s http://ollama:11434/api/tags | grep -q 'qwen2:1.5b' || curl -X POST http://ollama:11434/api/pull -H 'Content-Type: application/json' -d '{\"name\":\"qwen2:1.5b\"}' --no-buffer;
       echo 'Ollama ready';
       "
     networks:

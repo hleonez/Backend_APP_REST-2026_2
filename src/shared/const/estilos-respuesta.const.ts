@@ -45,7 +45,7 @@ export const ESTILOS_RESPUESTA: EstiloRespuesta[] = [
     id: 'crisis_derivacion',
     nombre: 'Derivación por crisis',
     reglas_de_seleccion:
-      'Palabras clave de crisis (PALABRAS_ALERTA_CRITICA). Prioridad máxima; no depende del encoder de sentimiento.',
+      'Score de crisis de Clef. No depende de una lista de subcadenas.',
     especificaciones_obligatorias: [
       'Validar la emocion sin minimizarla.',
       'Comunicar con calma que se esta conectando de inmediato con apoyo profesional (Salvavidas) o una linea de ayuda.',

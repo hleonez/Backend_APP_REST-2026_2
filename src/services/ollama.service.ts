@@ -1,3 +1,4 @@
+import { anexarDirectriz } from './clef-decision';
 import { construirPromptDinamico, construirPromptFinal, generarRespuestaFallbackNatural, esRespuestaAceptable } from './prompts-enhanced.service';
 import { analizarPatronesEmocionales, type PerfilEmocional } from './user-profile.service';
 import type { EstiloRespuestaId } from '../shared/const/estilos-respuesta.const';
@@ -10,7 +11,7 @@ import {
 } from '../shared/utils/semaforo-dimensiones.utils';
 
 const OLLAMA_API_URL = process.env.OLLAMA_API_URL || 'http://localhost:11434';
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'qwen3:8b';
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'qwen2:1.5b';
 const OLLAMA_KEEP_ALIVE = process.env.OLLAMA_KEEP_ALIVE || '30m';
 const OLLAMA_NUM_CTX = Number(process.env.OLLAMA_NUM_CTX) || 4096;
 const OLLAMA_NUM_THREAD = Number(process.env.OLLAMA_NUM_THREAD) || 6;
@@ -46,7 +47,7 @@ interface ChatResponse {
 }
 
 const MENSAJE_CRITICO_FALLBACK =
-  'Gracias por contarmelo. Lo que estas viviendo es importante y no estas solo. Te recomiendo contactar ahora mismo al equipo de Salvavidas o a un profesional de confianza para acompanarte de inmediato.';
+  'Gracias por contarmelo. Lo que estas viviendo es importante y no estas solo. Te recomiendo contactar ahora mismo al equipo de Salvavidas o a la consejeria de la Universidad Libre seccional Barranquilla. Si es urgente, llama al 123.';
 
 const RESPUESTAS_DESECHABLES = [
   'no puedo asistir',
@@ -132,7 +133,7 @@ const esRespuestaDesechable = (respuesta: string): boolean => {
 
 const construirRespuestaFallback = (mensaje: string): string => {
   if (detectarRiesgoEnTexto(mensaje)) {
-    return 'Escúchame: lo que sientes es real y importante. Pero necesitas ayuda ahora mismo. Por favor llama al 123 (Salvavidas) o habla con tu familia, un profesor o consejería. Yo puedo acompañarte, pero necesitas apoyo profesional urgente. ¿Estás en un lugar seguro?';
+    return 'Escúchame: lo que sientes es real y importante. Pero necesitas ayuda ahora mismo. Por favor llama al 123 o acude a la consejería de la Universidad Libre seccional Barranquilla. Yo puedo acompañarte, pero necesitas apoyo profesional urgente. ¿Estás en un lugar seguro?';
   }
 
   const emocion = detectarEmocion(mensaje);
@@ -689,6 +690,8 @@ export const chatWithOllama = async (params: {
   perfil?: PerfilEmocional;
   /** Últimos turnos del chat IA, sin el mensaje actual. */
   historial?: OllamaChatMessage[];
+  /** Bloque de Clef. Se anexa al system prompt; no reemplaza la identidad de NOA. */
+  directriz?: string;
 }): Promise<ChatResponse> => {
   const {
     mensaje,
@@ -698,6 +701,7 @@ export const chatWithOllama = async (params: {
     estilo = 'conversacion_neutral',
     perfil: perfilParam,
     historial = [],
+    directriz,
   } = params;
 
   try {
@@ -728,7 +732,7 @@ export const chatWithOllama = async (params: {
       };
     }
 
-    const systemPrompt = construirPromptDinamico(perfilContexto, estilo);
+    const systemPrompt = anexarDirectriz(construirPromptDinamico(perfilContexto, estilo), directriz);
     const prompts = construirPromptFinal(mensaje, systemPrompt, estilo, numeroMensaje, contexto);
 
     if (process.env.NODE_ENV !== 'production') {

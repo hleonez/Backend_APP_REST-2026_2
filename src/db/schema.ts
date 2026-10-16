@@ -538,6 +538,9 @@ export const mensajes_chat = pgTable('mensajes_chat', {
   sentimiento: varchar('sentimiento', { length: 10 }), // 'NEG' | 'NEU' | 'POS'
   confianza: numeric('confianza', { precision: 5, scale: 3 }),
   sentimiento_scores: jsonb('sentimiento_scores'), // { NEG, NEU, POS }
+  clef_raiz: varchar('clef_raiz', { length: 64 }),
+  clef_score_crisis: numeric('clef_score_crisis', { precision: 6, scale: 4 }),
+  clef_fuera_de_dominio: boolean('clef_fuera_de_dominio'),
 
   enviado_en: timestamp('enviado_en').defaultNow().notNull(),
 

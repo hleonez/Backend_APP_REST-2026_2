@@ -1,98 +1,36 @@
-name: Sync main -> develop
+name: Sync develop with main
 
-# Después de cada merge a `main`, abre (o reutiliza) un Pull Request de
-# `main` hacia `develop` para que `develop` quede alineada con `main`, y le
-# activa auto-merge para que se fusione solo en cuanto pasen los checks
-# obligatorios (CI + Branch Policy). El merge SIEMPRE es un merge commit
-# real (`--merge`, nunca `--squash` ni `--rebase`), para que `main` quede
-# como ancestro directo de `develop` y el historial no se reescriba.
-#
-# Esta es la ÚNICA vía permitida para llevar cambios de `main` a `develop`:
-# el PR lo crea siempre este workflow con `github-actions[bot]` como autor.
-# La política de ramas (`branch-policy.yml`) usa esa condición para permitir
-# esta excepción puntual.
+# Después de cada merge a `main`, adelanta `develop` hasta ese commit
+# cuando `develop` es ancestro de `main`. No usa --force: si `develop`
+# tiene commits que `main` no tiene, el job falla y no reescribe historia.
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch: {}
 
 permissions:
-  contents: read
-  pull-requests: write
+  contents: write
+
+concurrency:
+  group: sync-main-develop
+  cancel-in-progress: false
 
 jobs:
-  sync-pr:
-    name: Abrir/actualizar PR de sincronización y activar auto-merge
+  sync:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout del repositorio
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Verificar si develop ya está al día con main
-        id: diff
+      - name: Fast-forward develop to main
         run: |
-          git fetch origin main develop
-          if git diff --quiet origin/develop origin/main; then
-            echo "has_diff=false" >> "$GITHUB_OUTPUT"
+          git fetch origin develop
+          echo "HEAD (main): $(git rev-parse HEAD)"
+          echo "origin/develop: $(git rev-parse origin/develop)"
+          if git merge-base --is-ancestor origin/develop HEAD; then
+            git push origin HEAD:develop
           else
-            echo "has_diff=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Buscar PR de sincronización existente
-        id: existing_pr
-        if: steps.diff.outputs.has_diff == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          pr_number=$(gh pr list \
-            --base develop \
-            --head main \
-            --state open \
-            --json number \
-            --jq '.[0].number // empty')
-          echo "number=$pr_number" >> "$GITHUB_OUTPUT"
-
-      - name: Crear PR de sincronización main -> develop
-        if: steps.diff.outputs.has_diff == 'true' && steps.existing_pr.outputs.number == ''
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh pr create \
-            --base develop \
-            --head main \
-            --title "chore: sync main -> develop" \
-            --body "PR automático creado por el workflow de sincronización. Alinea \`develop\` con los últimos cambios fusionados en \`main\`. Se fusiona solo (auto-merge, merge commit) en cuanto pasan los checks obligatorios (CI + Branch Policy). No requiere revisión manual."
-
-      - name: Nada que sincronizar
-        if: steps.diff.outputs.has_diff == 'false'
-        run: echo "develop ya está al día con main, no se crea PR."
-
-      - name: Activar auto-merge (merge commit) en el PR de sincronización
-        if: steps.diff.outputs.has_diff == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          pr_number="${{ steps.existing_pr.outputs.number }}"
-
-          if [ -z "$pr_number" ]; then
-            # El PR se acaba de crear en el paso anterior; volvemos a
-            # buscarlo para obtener su número (gh pr create no lo devuelve
-            # como JSON directamente).
-            pr_number=$(gh pr list \
-              --base develop \
-              --head main \
-              --state open \
-              --json number \
-              --jq '.[0].number // empty')
-          fi
-
-          if [ -z "$pr_number" ]; then
-            echo "No se pudo encontrar el PR de sincronización main -> develop; no se puede activar auto-merge."
+            echo "develop tiene commits que main no tiene. No se hace force-push."
             exit 1
           fi
-
-          echo "Activando auto-merge (merge commit real) en el PR #$pr_number..."
-          gh pr merge "$pr_number" --auto --merge
