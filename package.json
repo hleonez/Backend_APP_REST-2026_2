@@ -10,7 +10,7 @@
     "db:generate": "drizzle-kit generate:pg",
     "db:push": "drizzle-kit push:pg",
     "db:migrate": "ts-node src/db/migrate.ts",
-    "db:deploy": "npm run db:generate && npm run db:migrate",
+    "db:deploy": "npm run db:migrate",
     "db:seed": "ts-node src/db/seed.ts",
     "db:test": "node scripts/test-db-connection.js",
     "test": "node --require ts-node/register/transpile-only --test tests/noa-clef.test.ts"

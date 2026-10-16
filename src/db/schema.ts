@@ -1,5 +1,6 @@
 import { relations, sql } from 'drizzle-orm';
 import { pgTable, serial, varchar, integer, timestamp, boolean, text, date, index, uniqueIndex, numeric, jsonb } from 'drizzle-orm/pg-core';
+import type { PgColumn } from 'drizzle-orm/pg-core';
 
 // ================================
 // USUARIOS
@@ -761,7 +762,11 @@ export const ova_reglas = pgTable('ova_reglas', {
   idxOvaReglasOvaId: index('idx_ova_reglas_ova_id').on(t.ova_id),
   idxOvaReglasIsActive: index('idx_ova_reglas_is_active').on(t.is_active),
   idxOvaReglasMatchUnique: uniqueIndex('idx_ova_reglas_match_unique')
-    .on(t.ova_id, t.dimension, t.nivel)
+    .on(
+      t.ova_id,
+      sql`COALESCE(${t.dimension}, '')` as unknown as PgColumn,
+      sql`COALESCE(${t.nivel}, '')` as unknown as PgColumn,
+    )
     .where(sql`deleted_at IS NULL`),
 }));
 

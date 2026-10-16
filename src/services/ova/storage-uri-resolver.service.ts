@@ -97,7 +97,7 @@ export class StorageUriResolver {
 
     if (source === OVA_STORAGE_SOURCE.YOUTUBE) {
       const videoId = this.extractYouTubeId(trimmed) || '';
-      const watchUrl = videoId ? `https://www.youtube.com/watch?v=v=${videoId}` : trimmed;
+      const watchUrl = videoId ? `https://www.youtube.com/watch?v=${videoId}` : trimmed;
       const embedUrl = videoId ? `https://www.youtube-nocookie.com/embed/${videoId}` : trimmed;
 
       return {

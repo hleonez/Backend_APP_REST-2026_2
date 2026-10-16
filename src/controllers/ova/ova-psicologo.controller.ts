@@ -388,12 +388,35 @@ export class OvaPsicologoController {
         return;
       }
 
+      const dimension = parsed.data.dimension ?? null;
+      const nivel = parsed.data.nivel ?? null;
+
+      const [reglaExistente] = await db
+        .select({ id: schema.ova_reglas.id })
+        .from(schema.ova_reglas)
+        .where(
+          and(
+            eq(schema.ova_reglas.ova_id, ovaId),
+            isNull(schema.ova_reglas.deleted_at),
+            sql`${schema.ova_reglas.dimension} IS NOT DISTINCT FROM ${dimension}`,
+            sql`${schema.ova_reglas.nivel} IS NOT DISTINCT FROM ${nivel}`,
+          ),
+        )
+        .limit(1);
+
+      if (reglaExistente) {
+        res.status(409).json({
+          message: 'Ya existe una regla activa para este OVA con la misma dimensión y nivel',
+        });
+        return;
+      }
+
       const [nuevaRegla] = await db
         .insert(schema.ova_reglas)
         .values({
           ova_id: ovaId,
-          dimension: parsed.data.dimension || null,
-          nivel: parsed.data.nivel || null,
+          dimension,
+          nivel,
           prioridad: parsed.data.prioridad,
           is_active: parsed.data.is_active,
           creado_por: req.user?.id || null,

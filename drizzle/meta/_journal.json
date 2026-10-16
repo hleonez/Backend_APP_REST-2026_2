@@ -71,6 +71,13 @@
       "when": 1776900000000,
       "tag": "0009_ovas",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1777000000000,
+      "tag": "0010_ova_reglas_null_unique",
+      "breakpoints": true
     }
   ]
 }
