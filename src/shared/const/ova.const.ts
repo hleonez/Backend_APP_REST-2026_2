@@ -32,6 +32,9 @@ export const OVA_COOLDOWN_DAYS = {
 
 export const OVA_MAX_ASIGNACIONES_POR_EVALUACION = 3;
 
+/** Prefijo público del catálogo. Archivos privados (perfil) usan otro prefijo y quedan fuera de este módulo. */
+export const OVA_R2_KEY_PREFIX = 'ovas/';
+
 export const DIMENSIONES_SEMAFORO_PERMITIDAS = [
   'ansiedad',
   'estres_academico',

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authenticate, isPsicologo } from '../middleware/auth.middleware';
 import { esPsicologoDeEstudiante } from '../middleware/authorization.middleware';
+import { recibirArchivoOva } from '../middleware/ova-archivo.middleware';
 import { OvaPsicologoController } from '../controllers/ova/ova-psicologo.controller';
 
 const router = Router();
@@ -92,6 +93,48 @@ router.get('/', authenticate, isPsicologo, OvaPsicologoController.listarOvas);
  *         description: URL o campos inválidos
  */
 router.post('/', authenticate, isPsicologo, OvaPsicologoController.crearOva);
+
+/**
+ * @swagger
+ * /api/psicologo/ovas/archivos:
+ *   post:
+ *     summary: Subir un archivo de OVA a Cloudflare R2
+ *     description: >
+ *       Guarda el objeto bajo el prefijo público `ovas/` y devuelve la object key.
+ *       Esa key se envía luego como `resource_url` con `storage_source=CLOUDFLARE_R2`.
+ *       El estudiante la consulta como URL pública (`R2_PUBLIC_BASE_URL` + key). No se firman URLs.
+ *     tags: [OVAs - Portal Psicólogo]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - archivo
+ *             properties:
+ *               archivo:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       201:
+ *         description: Archivo cargado. `resource_url` es la object key.
+ *       400:
+ *         description: Archivo ausente o tipo no permitido
+ *       413:
+ *         description: El archivo supera el tamaño máximo
+ *       503:
+ *         description: Faltan credenciales o la URL pública de R2
+ */
+router.post(
+  '/archivos',
+  authenticate,
+  isPsicologo,
+  recibirArchivoOva,
+  OvaPsicologoController.subirArchivo,
+);
 
 /**
  * @swagger

@@ -1,4 +1,4 @@
-import { OVA_STORAGE_SOURCE, OvaStorageSource } from '../../shared/const/ova.const';
+import { OVA_R2_KEY_PREFIX, OVA_STORAGE_SOURCE, OvaStorageSource } from '../../shared/const/ova.const';
 
 export interface ResolvedResource {
   storage_source: OvaStorageSource;
@@ -53,8 +53,14 @@ export class StorageUriResolver {
       }
 
       case OVA_STORAGE_SOURCE.CLOUDFLARE_R2: {
-        if (trimmed.length === 0) {
-          return { isValid: false, error: 'La clave de objeto o URL de Cloudflare R2 no puede estar vacía' };
+        if (this.isHttpUrl(trimmed)) {
+          return { isValid: true };
+        }
+        if (!this.isSafeOvaObjectKey(trimmed)) {
+          return {
+            isValid: false,
+            error: `La clave de R2 debe empezar por "${OVA_R2_KEY_PREFIX}" y no puede contener rutas relativas`,
+          };
         }
         return { isValid: true };
       }
@@ -77,16 +83,28 @@ export class StorageUriResolver {
   }
 
   /**
-   * Genera una URL firmada o pública para R2 (en MVP utiliza la base pública configurada).
+   * URL pública del catálogo OVA. No firma: el estudiante abre R2_PUBLIC_BASE_URL + key.
+   * Las URLs firmadas quedan para prefijos privados (por ejemplo fotos de perfil) y no se generan aquí.
    */
   public static signR2Url(keyOrUrl: string): string {
     const trimmed = keyOrUrl.trim();
-    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    if (this.isHttpUrl(trimmed)) {
       return trimmed;
     }
     const baseUrl = (process.env.R2_PUBLIC_BASE_URL || '').replace(/\/+$/, '');
     const cleanKey = trimmed.replace(/^\/+/, '');
     return baseUrl ? `${baseUrl}/${cleanKey}` : cleanKey;
+  }
+
+  public static isHttpUrl(value: string): boolean {
+    return value.startsWith('http://') || value.startsWith('https://');
+  }
+
+  /** Key de catálogo: ovas/..., sin .. ni barras invertidas. */
+  public static isSafeOvaObjectKey(value: string): boolean {
+    if (!value.startsWith(OVA_R2_KEY_PREFIX)) return false;
+    if (value.includes('..') || value.includes('\\') || value.includes('//')) return false;
+    return /^ovas\/[a-zA-Z0-9][a-zA-Z0-9/_\-.]*$/.test(value);
   }
 
   /**

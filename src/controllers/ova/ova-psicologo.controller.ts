@@ -11,6 +11,7 @@ import {
   OVA_TIPO_ACTIVIDAD,
 } from '../../shared/const/ova.const';
 import { StorageUriResolver } from '../../services/ova/storage-uri-resolver.service';
+import { R2StorageError, R2StorageService } from '../../services/ova/r2-storage.service';
 import { EffectivenessEvaluator } from '../../services/ova/effectiveness-evaluator.service';
 
 const crearOvaSchema = z.object({
@@ -161,6 +162,39 @@ export class OvaPsicologoController {
     } catch (error) {
       console.error('[OvaPsicologoController] Error creando OVA:', error);
       res.status(500).json({ message: 'Error interno al registrar el OVA' });
+    }
+  }
+
+  /**
+   * Sube un archivo del catálogo a R2 y devuelve la object key.
+   * El estudiante la abre después como URL pública; no se genera una URL firmada.
+   */
+  public static async subirArchivo(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      const file = req.file;
+      if (!file) {
+        res.status(400).json({ message: 'Adjunta el archivo en el campo "archivo"' });
+        return;
+      }
+
+      const resourceUrl = await R2StorageService.putOvaObject({
+        body: file.buffer,
+        contentType: file.mimetype,
+      });
+
+      res.status(201).json({
+        message: 'Archivo cargado en R2',
+        storage_source: OVA_STORAGE_SOURCE.CLOUDFLARE_R2,
+        resource_url: resourceUrl,
+        recurso_resuelto: StorageUriResolver.resolve(OVA_STORAGE_SOURCE.CLOUDFLARE_R2, resourceUrl),
+      });
+    } catch (error) {
+      if (error instanceof R2StorageError) {
+        res.status(error.statusCode).json({ message: error.message });
+        return;
+      }
+      console.error('[OvaPsicologoController] Error subiendo archivo OVA:', error);
+      res.status(500).json({ message: 'Error interno al subir el archivo a R2' });
     }
   }
 
