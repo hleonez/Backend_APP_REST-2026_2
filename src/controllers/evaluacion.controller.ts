@@ -8,6 +8,9 @@ import { db } from '../db';
 import * as schema from '../db/schema';
 
 
+import { RuleAssignmentEngine } from '../services/ova/rule-assignment-engine.service';
+import { EffectivenessEvaluator } from '../services/ova/effectiveness-evaluator.service';
+
 // Validation schema for evaluation responses
 const evaluacionSchema = z.object({
   respuestas: z.array(
@@ -17,6 +20,7 @@ const evaluacionSchema = z.object({
     })
   ),
   observaciones: z.string().optional(),
+  ova_asignacion_id: z.number().int().positive().optional(),
 });
 
 /**
@@ -188,6 +192,27 @@ export const crearEvaluacion = async (req: AuthRequest, res: Response): Promise<
       return evaluacionCreada;
     });
 
+    // Enlace de post-test de efectividad si viene ova_asignacion_id
+    let asignacionPostEnlazada: any = null;
+    if (validationResult.data.ova_asignacion_id) {
+      asignacionPostEnlazada = await EffectivenessEvaluator.enlazarPostTest({
+        ovaAsignacionId: validationResult.data.ova_asignacion_id,
+        postEvaluacionId: nuevaEvaluacion.id,
+        usuarioId: req.user!.id,
+        postPuntaje: nuevaEvaluacion.puntaje_total ?? analisisResult.puntaje,
+        postEstadoSemaforo: nuevaEvaluacion.estado_semaforo ?? analisisResult.estado,
+      });
+    }
+
+    // Motor de recomendación dinámica de OVAs
+    const ovasAsignados = await RuleAssignmentEngine.run({
+      evaluacionId: nuevaEvaluacion.id,
+      usuarioId: req.user!.id,
+      estadoSemaforo: nuevaEvaluacion.estado_semaforo ?? analisisResult.estado,
+      subcategoriaPrincipal: nuevaEvaluacion.subcategoria_principal ?? analisisResult.subcategoria_principal,
+      dimensiones: analisisResult.dimensiones,
+    });
+
     const recs = analisisResult.recomendaciones && analisisResult.recomendaciones.length > 0
       ? analisisResult.recomendaciones
       : obtenerRecomendacionesPorEstado(analisisResult.estado, analisisResult.subcategoria_principal);
@@ -201,11 +226,15 @@ export const crearEvaluacion = async (req: AuthRequest, res: Response): Promise<
       recomendaciones: recs,
       sugerencias: recs,
       dimensiones: analisisResult.dimensiones,
+      ovas_asignados: ovasAsignados,
+      post_test_enlazado: asignacionPostEnlazada ? true : false,
     };
 
     res.status(201).json({
       message: 'Evaluación creada exitosamente',
       evaluacion: evaluacionPayload,
+      ovas_asignados: ovasAsignados,
+      post_test_enlazado: asignacionPostEnlazada ? true : false,
       analisis: {
         ...analisisResult,
         estado: analisisResult.estado,

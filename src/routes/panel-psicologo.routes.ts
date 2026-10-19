@@ -16,6 +16,7 @@ import {
   eliminarActividadEstudiante,
   getSugerenciasActividades,
 } from '../controllers/panel-psicologo.controller';
+import { OvaPsicologoController } from '../controllers/ova/ova-psicologo.controller';
 
 const router = Router();
 
@@ -245,6 +246,35 @@ router.get(
   isPsicologo,
   esPsicologoDeEstudiante,
   getActividadesEstudiante
+);
+
+/**
+ * @swagger
+ * /api/psicologo/pacientes/{estudianteId}/ovas:
+ *   get:
+ *     summary: Historial de OVAs asignados automáticamente al paciente
+ *     description: Lista las actividades y recursos recomendados por el motor de reglas según el semáforo y dimensiones.
+ *     tags: [PanelPsicologo]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: estudianteId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Historial de OVAs del estudiante
+ *       403:
+ *         description: No autorizado
+ */
+router.get(
+  '/pacientes/:estudianteId/ovas',
+  authenticate,
+  isPsicologo,
+  esPsicologoDeEstudiante,
+  OvaPsicologoController.listarAsignacionesPaciente
 );
 
 /**
