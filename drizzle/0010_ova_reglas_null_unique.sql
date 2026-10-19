@@ -1,0 +1,3 @@
+UPDATE "ova_reglas" r SET "deleted_at" = now(), "is_active" = false WHERE r."deleted_at" IS NULL AND EXISTS (SELECT 1 FROM "ova_reglas" r2 WHERE r2."deleted_at" IS NULL AND r2."id" < r."id" AND r2."ova_id" = r."ova_id" AND COALESCE(r2."dimension", '') = COALESCE(r."dimension", '') AND COALESCE(r2."nivel", '') = COALESCE(r."nivel", ''));--> statement-breakpoint
+DROP INDEX IF EXISTS "idx_ova_reglas_match_unique";--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "idx_ova_reglas_match_unique" ON "ova_reglas" ("ova_id", COALESCE("dimension", ''), COALESCE("nivel", '')) WHERE "deleted_at" IS NULL;

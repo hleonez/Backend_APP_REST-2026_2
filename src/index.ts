@@ -42,6 +42,9 @@ import onboardingRoutes from './routes/onboarding.routes';
 import psicologosRoutes from './routes/psicologos.routes' ;
 import asignacionesRoutes from './routes/asignaciones.routes';
 import panelPsicologoRoutes from './routes/panel-psicologo.routes';
+import ovaRoutes from './routes/ova.routes';
+import ovaPsicologoRoutes from './routes/ova-psicologo.routes';
+import ovaAdminRoutes from './routes/ova-admin.routes';
 
 const app = express();
 const server = http.createServer(app);
@@ -98,6 +101,7 @@ app.use('/api/diario', diarioRoutes);
 app.use('/api/opciones-actividades', opcionesActividadesRoutes);
 app.use('/api/registro-actividades', registroActividadesRoutes);
 app.use('/api/registro-emocional', registroEmocionalRoutes);
+app.use('/api/admin/ovas', ovaAdminRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/settings', settingsRoutes);
@@ -106,6 +110,8 @@ app.use('/api/onboarding', onboardingRoutes);
 app.use('/api/psicologos', psicologosRoutes);
 app.use('/api/asignaciones', asignacionesRoutes);
 app.use('/api/psicologo', panelPsicologoRoutes);
+app.use('/api/ovas', ovaRoutes);
+app.use('/api/psicologo/ovas', ovaPsicologoRoutes);
 
 
 // ============================================================

@@ -11,6 +11,7 @@ import {
   DIMENSION_GENERAL,
   obtenerRecomendacionesPorEstado,
 } from '../shared/utils/semaforo-dimensiones.utils';
+import { RuleAssignmentEngine } from '../services/ova/rule-assignment-engine.service';
 
 
 const asignarSemaforoSchema = z.object({
@@ -163,6 +164,15 @@ export const asignarSemaforoUsuarioAutenticado = async (req: AuthRequest, res: R
       return { evaluacionActualizada: evaluacion, dimensionesPersistidas: dimensionesCalculadas };
     });
 
+    // Motor de recomendación dinámica de OVAs
+    const ovasAsignados = await RuleAssignmentEngine.run({
+      evaluacionId: evaluacionActualizada.id,
+      usuarioId,
+      estadoSemaforo: estado,
+      subcategoriaPrincipal: evaluacionActualizada.subcategoria_principal,
+      dimensiones: dimensionesPersistidas,
+    });
+
     const recs = obtenerRecomendacionesPorEstado(estado, evaluacionActualizada.subcategoria_principal);
 
     const evaluacionPayload = {
@@ -174,10 +184,12 @@ export const asignarSemaforoUsuarioAutenticado = async (req: AuthRequest, res: R
       recomendaciones: recs,
       sugerencias: recs,
       dimensiones: dimensionesPersistidas,
+      ovas_asignados: ovasAsignados,
     };
 
     res.json({
       message: 'Semáforo asignado correctamente',
+      ovas_asignados: ovasAsignados,
       data: {
         usuario_id: usuarioId,
         estado: estado,
@@ -188,6 +200,7 @@ export const asignarSemaforoUsuarioAutenticado = async (req: AuthRequest, res: R
         recomendaciones: recs,
         sugerencias: recs,
         dimensiones: dimensionesPersistidas,
+        ovas_asignados: ovasAsignados,
         evaluacion: evaluacionPayload,
       },
       estado: estado,
