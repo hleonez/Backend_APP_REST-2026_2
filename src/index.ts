@@ -22,6 +22,8 @@ import { setupSwagger } from './config/swagger';
 
 // OBSERVABILIDAD
 import { metricsHandler, metricsMiddleware } from './middleware/metrics.middleware';
+import { registerDbPoolMetrics, registerSocketMetrics } from './config/metrics';
+import { pool } from './db';
 
 // IA
 import { initializeOllama } from './services/ollama.service';
@@ -97,6 +99,8 @@ const io = new SocketServer(server, {
   }
 });
 setupWebSocket(io);
+registerSocketMetrics(io);
+registerDbPoolMetrics(pool);
 
 // ============================================================
 // Routes

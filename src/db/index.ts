@@ -38,4 +38,7 @@ const pool = new Pool(getDatabaseConfig());
 export const db = drizzle(pool, { schema });
 
 // Export schema for use elsewhere
-export { schema }; 
+export { schema };
+
+// Export the pool so observability can read its connection counters
+export { pool }; 

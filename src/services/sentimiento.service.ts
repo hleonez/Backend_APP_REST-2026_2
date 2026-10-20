@@ -17,6 +17,8 @@
  * autoriza tratar el mensaje como fuera de dominio.
  */
 
+import { trackedFetch } from '../shared/utils/outbound-metrics';
+
 const SENTIMENT_API_URL = process.env.SENTIMENT_API_URL || 'http://localhost:8000';
 const SENTIMENT_TIMEOUT_MS = 2000;
 
@@ -80,7 +82,7 @@ export const analizarSentimiento = async (texto: string): Promise<SentimientoRes
   const timeout = setTimeout(() => controller.abort(), SENTIMENT_TIMEOUT_MS);
 
   try {
-    const response = await fetch(`${SENTIMENT_API_URL}/analyze`, {
+    const response = await trackedFetch('sentiment', 'analyze')(`${SENTIMENT_API_URL}/analyze`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ texto }),
