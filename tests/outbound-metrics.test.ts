@@ -1,9 +1,14 @@
 import assert from 'node:assert/strict';
 import { AddressInfo } from 'node:net';
-import { after, before, describe, it } from 'node:test';
+import { after, before, describe, it, mock } from 'node:test';
 import express from 'express';
 import http from 'node:http';
-import { registerDbPoolMetrics, registerSocketMetrics } from '../src/config/metrics';
+import {
+  httpRequestDuration,
+  outboundRequestDuration,
+  registerDbPoolMetrics,
+  registerSocketMetrics,
+} from '../src/config/metrics';
 import { metricsHandler, metricsMiddleware } from '../src/middleware/metrics.middleware';
 import { trackOutbound, trackedFetch } from '../src/shared/utils/outbound-metrics';
 
@@ -139,5 +144,57 @@ describe('metricas de llamadas salientes', () => {
     assert.match(body, /db_pool_connections\{[^}]*state="idle"[^}]*\} 5/);
     assert.match(body, /db_pool_connections\{[^}]*state="waiting"[^}]*\} 2/);
     assert.match(body, /socketio_connected_clients\{[^}]*\} 3/);
+  });
+});
+
+describe('la métrica nunca rompe el servicio que mide', () => {
+  it('si registrar la métrica falla, la llamada al servicio externo funciona igual', async () => {
+    const stopQueFalla = mock.fn(() => { throw new Error('metrica rota'); });
+    const startTimer = mock.method(outboundRequestDuration, 'startTimer', () => stopQueFalla as never);
+    try {
+      const response = await trackedFetch('sentiment', 'analyze', respuesta(200))('http://x');
+      assert.equal(response.status, 200);
+
+      // Y si el servicio falla, el error original llega intacto al llamador.
+      const falla = new Error('error del servicio');
+      await assert.rejects(
+        trackedFetch('sentiment', 'analyze', async () => { throw falla; })('http://x'),
+        (error) => error === falla,
+      );
+      assert.equal(stopQueFalla.mock.callCount(), 2);
+    } finally {
+      startTimer.mock.restore();
+    }
+  });
+
+  it('si iniciar la medición falla, la llamada al servicio externo funciona igual', async () => {
+    const startTimer = mock.method(outboundRequestDuration, 'startTimer', () => {
+      throw new Error('no se pudo iniciar');
+    });
+    try {
+      const valor = await trackOutbound('r2', 'put_object', async () => 'subido');
+      assert.equal(valor, 'subido');
+      const response = await trackedFetch('ollama', 'chat', respuesta(200))('http://x');
+      assert.equal(response.status, 200);
+    } finally {
+      startTimer.mock.restore();
+    }
+  });
+
+  it('si registrar la petición HTTP falla, la respuesta al cliente sale igual y el proceso sigue vivo', async () => {
+    const observe = mock.method(httpRequestDuration, 'observe', () => {
+      throw new Error('metrica rota');
+    });
+    try {
+      const res = await fetch(`${baseUrl}/api/lento-b`);
+      assert.equal(res.status, 200);
+      assert.deepEqual(await res.json(), { ok: true });
+      await sleep(30); // da tiempo a que corra el evento 'finish' de la respuesta
+      assert.ok(observe.mock.callCount() >= 1);
+    } finally {
+      observe.mock.restore();
+    }
+    // El servidor sigue respondiendo: la excepción no tumbó el proceso.
+    assert.equal((await fetch(`${baseUrl}/metrics`)).status, 200);
   });
 });

@@ -18,7 +18,11 @@ export const metricsMiddleware: RequestHandler = (req: Request, res: Response, n
   }
 
   const startedAt = process.hrtime.bigint();
-  httpRequestsInFlight.inc();
+  try {
+    httpRequestsInFlight.inc();
+  } catch (error) {
+    console.warn('[METRICS] No se pudo contar la petición en curso (se ignora):', (error as Error)?.message ?? error);
+  }
 
   let recorded = false;
   const record = (statusCode: string): void => {
@@ -26,12 +30,18 @@ export const metricsMiddleware: RequestHandler = (req: Request, res: Response, n
       return;
     }
     recorded = true;
-    httpRequestsInFlight.dec();
-    const seconds = Number(process.hrtime.bigint() - startedAt) / 1e9;
-    httpRequestDuration.observe(
-      { method: req.method, route: resolveRoute(req), status_code: statusCode },
-      seconds,
-    );
+    // Se ejecuta dentro de un evento de la respuesta: una excepción aquí no tiene
+    // quien la capture y tumbaría el proceso. La métrica jamás debe poder hacerlo.
+    try {
+      httpRequestsInFlight.dec();
+      const seconds = Number(process.hrtime.bigint() - startedAt) / 1e9;
+      httpRequestDuration.observe(
+        { method: req.method, route: resolveRoute(req), status_code: statusCode },
+        seconds,
+      );
+    } catch (error) {
+      console.warn('[METRICS] No se pudo registrar la petición (se ignora):', (error as Error)?.message ?? error);
+    }
   };
 
   res.on('finish', () => record(String(res.statusCode)));
