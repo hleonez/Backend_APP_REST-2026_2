@@ -20,6 +20,11 @@ import {
 import { setupWebSocket } from './websocket/socket';
 import { setupSwagger } from './config/swagger';
 
+// OBSERVABILIDAD
+import { metricsHandler, metricsMiddleware } from './middleware/metrics.middleware';
+import { registerDbPoolMetrics, registerSocketMetrics } from './config/metrics';
+import { pool } from './db';
+
 // IA
 import { initializeOllama } from './services/ollama.service';
 
@@ -63,6 +68,7 @@ app.set('etag', false);
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 app.use(morgan('dev'));
+app.use(metricsMiddleware);
 app.use(express.json());
 
 
@@ -76,6 +82,13 @@ app.get('/health', (_req: Request, res: Response) => {
 });
 
 // ============================================================
+// Métricas (Prometheus). Solo para la red interna: el proxy
+// público no debe exponer esta ruta.
+// ============================================================
+
+app.get('/metrics', metricsHandler);
+
+// ============================================================
 // WebSocket
 // ============================================================
 
@@ -86,6 +99,8 @@ const io = new SocketServer(server, {
   }
 });
 setupWebSocket(io);
+registerSocketMetrics(io);
+registerDbPoolMetrics(pool);
 
 // ============================================================
 // Routes

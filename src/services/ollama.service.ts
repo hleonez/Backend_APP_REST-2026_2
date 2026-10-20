@@ -2,6 +2,7 @@ import { anexarDirectriz } from './clef-decision';
 import { construirPromptDinamico, construirPromptFinal, generarRespuestaFallbackNatural, esRespuestaAceptable } from './prompts-enhanced.service';
 import { analizarPatronesEmocionales, type PerfilEmocional } from './user-profile.service';
 import type { EstiloRespuestaId } from '../shared/const/estilos-respuesta.const';
+import { trackedFetch } from '../shared/utils/outbound-metrics';
 import {
   agruparPuntajesPorDimension,
   clasificarDimensionPorTexto,
@@ -394,7 +395,7 @@ export const queryOllama = async (
 
     messages.push({ role: 'user', content: prompt });
 
-    const response = await fetch(`${OLLAMA_API_URL}/api/chat`, {
+    const response = await trackedFetch('ollama', 'chat')(`${OLLAMA_API_URL}/api/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

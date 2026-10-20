@@ -1,4 +1,5 @@
 import type { SentimientoResultado } from './sentimiento.service';
+import { trackedFetch } from '../shared/utils/outbound-metrics';
 import {
   interpretarClef,
   preguntasClef,
@@ -70,7 +71,7 @@ export const clasificarConClef = async (
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
     try {
-      const response = await fetchImpl(url, {
+      const response = await trackedFetch('cloudflare_ai', 'clef', fetchImpl)(url, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,

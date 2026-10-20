@@ -1,4 +1,5 @@
 import type { OllamaChatMessage } from './ollama.service';
+import { trackedFetch } from '../shared/utils/outbound-metrics';
 
 const TIMEOUT_MS = 20_000;
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
@@ -84,7 +85,7 @@ export const generarConSistema2 = async (
 
   let groqStatus = 0;
   try {
-    const groq = await postChat(fetchImpl, GROQ_URL, groqKey, groqModel, messages);
+    const groq = await postChat(trackedFetch('groq', 'chat', fetchImpl), GROQ_URL, groqKey, groqModel, messages);
     groqStatus = groq.status;
     if (groq.status === 200 && groq.texto) {
       return { texto: groq.texto, proveedor: 'groq' };
@@ -107,7 +108,7 @@ export const generarConSistema2 = async (
 
   try {
     const respaldo = await postChat(
-      fetchImpl,
+      trackedFetch('openrouter', 'chat', fetchImpl),
       OPENROUTER_URL,
       openRouterKey,
       openRouterModel,
