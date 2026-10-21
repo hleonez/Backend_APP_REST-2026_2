@@ -1,6 +1,7 @@
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { randomUUID } from 'crypto';
 import { OVA_R2_KEY_PREFIX } from '../../shared/const/ova.const';
+import { trackOutbound } from '../../shared/utils/outbound-metrics';
 
 const CONTENT_TYPE_EXTENSION: Record<string, string> = {
   'video/mp4': 'mp4',
@@ -48,14 +49,16 @@ export class R2StorageService {
     const { client, bucket } = this.client();
     const key = `${OVA_R2_KEY_PREFIX}${randomUUID()}.${extension}`;
 
-    await client.send(
-      new PutObjectCommand({
-        Bucket: bucket,
-        Key: key,
-        Body: input.body,
-        ContentType: contentType,
-        CacheControl: 'public, max-age=31536000, immutable',
-      }),
+    await trackOutbound('r2', 'put_object', () =>
+      client.send(
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: key,
+          Body: input.body,
+          ContentType: contentType,
+          CacheControl: 'public, max-age=31536000, immutable',
+        }),
+      ),
     );
 
     return key;
