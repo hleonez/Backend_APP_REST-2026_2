@@ -18,6 +18,8 @@ import {
 } from '../services/clef-decision';
 import { construirPromptDinamico, construirPromptFinal } from '../services/prompts-enhanced.service';
 import { generarConSistema2, mensajesParaSistema2, proveedorSistema2 } from '../services/system2.service';
+import { ASIGNACION_ESTADO } from '../shared/const/asignacion.const';
+import { emitirAlertaUrgente } from '../websocket/socket';
 
 // Validation schema for messages
 const mensajeSchema = z.object({
@@ -223,33 +225,59 @@ const construirConsejosBasicos = (texto: string): string[] => {
   return consejos;
 };
 
-const buscarProfesionalSalvavidas = async (): Promise<number | null> => {
-  const [moderador] = await db
+const buscarPsicologoParaCrisis = async (estudianteId: number): Promise<number | null> => {
+  const [asignado] = await db
     .select({ id: schema.usuarios.id })
-    .from(schema.usuarios)
-    .where(and(eq(schema.usuarios.id_rol, 4), eq(schema.usuarios.is_active, true)))
+    .from(schema.asignaciones)
+    .innerJoin(schema.usuarios, eq(schema.asignaciones.psicologo_id, schema.usuarios.id))
+    .where(and(
+      eq(schema.asignaciones.estudiante_id, estudianteId),
+      eq(schema.asignaciones.estado, ASIGNACION_ESTADO.APROBADO),
+      isNull(schema.asignaciones.deleted_at),
+      eq(schema.usuarios.id_rol, 2),
+      eq(schema.usuarios.is_active, true),
+      isNull(schema.usuarios.deleted_at),
+    ))
     .limit(1);
 
-  if (moderador?.id) {
-    return moderador.id;
+  if (asignado?.id) {
+    return asignado.id;
   }
 
   const [psicologo] = await db
     .select({ id: schema.usuarios.id })
     .from(schema.usuarios)
-    .where(and(eq(schema.usuarios.id_rol, 2), eq(schema.usuarios.is_active, true)))
+    .where(and(
+      eq(schema.usuarios.id_rol, 2),
+      eq(schema.usuarios.is_active, true),
+      isNull(schema.usuarios.deleted_at),
+    ))
     .limit(1);
 
   return psicologo?.id ?? null;
 };
 
-const escalarASalvavidas = async (params: {
+const nombreEstudiante = async (usuarioId: number): Promise<string> => {
+  const [fila] = await db
+    .select({
+      nombres: schema.usuarios.nombres,
+      apellidos: schema.usuarios.apellidos,
+    })
+    .from(schema.usuarios)
+    .where(eq(schema.usuarios.id, usuarioId))
+    .limit(1);
+
+  const nombre = [fila?.nombres, fila?.apellidos].filter(Boolean).join(' ').trim();
+  return nombre || `Estudiante ${usuarioId}`;
+};
+
+const derivarAPsicologo = async (params: {
   usuarioId: number;
   mensajeUsuario: string;
   respuestaIA: string;
   profesionalId?: number | null;
 }): Promise<{ chatId: number | null; profesionalId: number | null }> => {
-  const profesionalId = params.profesionalId ?? await buscarProfesionalSalvavidas();
+  const profesionalId = params.profesionalId ?? await buscarPsicologoParaCrisis(params.usuarioId);
 
   if (!profesionalId) {
     return { chatId: null, profesionalId: null };
@@ -294,13 +322,13 @@ const escalarASalvavidas = async (params: {
     {
       chat_id: chatId,
       usuario_id: params.usuarioId,
-      mensaje: `[ALERTA NOA] Mensaje detectado como riesgo: ${params.mensajeUsuario}`,
+      mensaje: `[ALERTA URGENTE] Mensaje detectado como riesgo: ${params.mensajeUsuario}`,
       enviado_en: new Date(),
     },
     {
       chat_id: chatId,
       usuario_id: profesionalId,
-      mensaje: `[ALERTA NOA] Respuesta inicial enviada al usuario: ${params.respuestaIA}`,
+      mensaje: `[ALERTA URGENTE] El estudiante necesita atención inmediata. Respuesta enviada: ${params.respuestaIA}`,
       enviado_en: new Date(),
     },
   ]);
@@ -309,6 +337,16 @@ const escalarASalvavidas = async (params: {
     .update(schema.chats)
     .set({ ultima_actividad: new Date(), isSendByAi: true })
     .where(eq(schema.chats.id, chatId));
+
+  emitirAlertaUrgente(profesionalId, {
+    urgente: true,
+    nivel: 'critico',
+    chatId,
+    estudianteId: params.usuarioId,
+    estudianteNombre: await nombreEstudiante(params.usuarioId),
+    mensaje: params.mensajeUsuario,
+    psicologoId: profesionalId,
+  });
 
   return { chatId, profesionalId };
 };
@@ -360,11 +398,11 @@ export const chatConIAUnificado = async (req: AuthRequest, res: Response): Promi
       const decision = await clasificarConClef(mensaje, sentimiento);
 
       if (decision.crisis) {
-        const profesionalId = await buscarProfesionalSalvavidas();
+        const profesionalId = await buscarPsicologoParaCrisis(req.user.id);
         const hayProfesional = profesionalId !== null;
 
         const respuestaCritica = hayProfesional
-          ? 'Gracias por decirme como te sientes. Lo que estas viviendo es importante y no estas solo. Voy a conectarte de inmediato con Salvavidas para que un profesional pueda acompanarte ahora mismo.'
+          ? 'Gracias por decirme como te sientes. Lo que estas viviendo es importante y no estas solo. En unos segundos te abro el chat con el psicologo de bienestar para que te acompañe ahora.'
           : 'Gracias por decirme como te sientes. Lo que estas viviendo es importante y no estas solo. Si necesitas hablar con alguien urgente, por favor contacta a la linea de emergencia 123 o acude a la consejeria de la Universidad Libre seccional Barranquilla. Yo estoy aqui para escucharte.';
 
         await guardarInteraccionIA({
@@ -382,15 +420,17 @@ export const chatConIAUnificado = async (req: AuthRequest, res: Response): Promi
 
         let escalamiento = { chatId: null as number | null, profesionalId: null as number | null };
         if (hayProfesional) {
-          escalamiento = await escalarASalvavidas({
+          escalamiento = await derivarAPsicologo({
             usuarioId: req.user.id,
             mensajeUsuario: mensaje,
             respuestaIA: respuestaCritica,
             profesionalId,
           });
         } else {
-          console.warn('[SALVAVIDAS] No hay profesional disponible para escalar caso critico del usuario', req.user.id);
+          console.warn('[CRISIS] No hay psicologo disponible para el usuario', req.user.id);
         }
+
+        const chatAbierto = escalamiento.chatId !== null;
 
         res.status(201).json(APISuccessResponse({
           usuario_id: req.user.id,
@@ -398,16 +438,16 @@ export const chatConIAUnificado = async (req: AuthRequest, res: Response): Promi
           mensaje_usuario: mensaje,
           respuesta_ia: respuestaCritica,
           timestamp: new Date().toISOString(),
-          requiere_salvavidas: hayProfesional,
+          requiere_salvavidas: chatAbierto,
           nivel_alerta: 'critico',
           coincidencias_alerta: [],
           categoria: decision.raiz ?? null,
           proveedor: 'ninguno',
           chat_salvavidas_id: escalamiento.chatId,
           psicologo_asignado_id: escalamiento.profesionalId,
-          mensaje_sistema: hayProfesional
-            ? 'Detectamos una situacion de riesgo. Ya derivamos tu caso a Salvavidas para atencion profesional.'
-            : 'Detectamos una situacion de riesgo. No hay un profesional disponible en este momento. Por favor contacta a la linea de emergencia 123 o a Bienestar Universitario de la Universidad Libre seccional Barranquilla.',
+          mensaje_sistema: chatAbierto
+            ? 'Detectamos una situacion de riesgo. Te vamos a llevar al chat en vivo con el psicologo de bienestar.'
+            : 'Detectamos una situacion de riesgo. No hay un psicologo disponible en este momento. Por favor contacta a la linea de emergencia 123 o a Bienestar Universitario de la Universidad Libre seccional Barranquilla.',
         }, 'Chat completado exitosamente'));
         return;
       }

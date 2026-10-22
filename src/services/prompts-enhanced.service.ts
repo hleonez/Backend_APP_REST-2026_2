@@ -98,7 +98,7 @@ Si hace falta una línea de emergencia, nombra solo la 123, Bienestar Universita
  */
 const VARIANTES_POR_ESTILO: Record<EstiloRespuestaId, string[]> = {
   crisis_derivacion: [
-    `Valida brevemente lo que siente y comunica con calma que ya se está conectando con apoyo profesional inmediato (Salvavidas).`,
+    `Valida brevemente lo que siente y comunica con calma que ya se está abriendo el chat en vivo con el psicólogo de bienestar.`,
   ],
   contencion_emocional: [
     `Valida lo que siente en la primera frase y acompaña sin apresurar consejos ni soluciones.`,
