@@ -14,6 +14,30 @@ interface TypingEvent {
   isTyping: boolean;
 }
 
+export interface AlertaUrgentePayload {
+  urgente: true;
+  nivel: 'critico';
+  chatId: number;
+  estudianteId: number;
+  estudianteNombre: string;
+  mensaje: string;
+  psicologoId: number;
+}
+
+let ioServer: Server | null = null;
+const alertasPendientes = new Map<number, AlertaUrgentePayload>();
+
+export const emitirAlertaUrgente = (
+  psicologoId: number,
+  payload: AlertaUrgentePayload,
+): void => {
+  alertasPendientes.set(psicologoId, payload);
+  if (!ioServer) return;
+
+  ioServer.in(`user:${psicologoId}`).socketsJoin(`chat:${payload.chatId}`);
+  ioServer.to(`user:${psicologoId}`).emit('alerta_urgente', payload);
+};
+
 const getTokenFromSocket = (socket: Socket): string | null => {
   const authToken = socket.handshake.auth?.token;
   const authorization = socket.handshake.headers.authorization;
@@ -27,6 +51,7 @@ const getTokenFromSocket = (socket: Socket): string | null => {
 };
 
 export const setupWebSocket = (io: Server): void => {
+  ioServer = io;
   io.use(async (socket, next) => {
     const token = getTokenFromSocket(socket);
     const user = token ? verifyToken(token) : null;
@@ -65,7 +90,14 @@ export const setupWebSocket = (io: Server): void => {
   io.on('connection', (socket: Socket) => {
     const user = socket.data.user as JwtPayload;
     onlineUsers.set(user.id, socket);
+    socket.join(`user:${user.id}`);
     socket.emit('authenticated', { success: true, userId: user.id });
+
+    const pendiente = alertasPendientes.get(user.id);
+    if (pendiente) {
+      socket.join(`chat:${pendiente.chatId}`);
+      socket.emit('alerta_urgente', pendiente);
+    }
 
     void getChatsForUser(user.id).then((chats) => {
       chats.forEach((chatId) => socket.join(`chat:${chatId}`));
@@ -122,6 +154,14 @@ export const setupWebSocket = (io: Server): void => {
         userId: user.id,
         isTyping: data.isTyping,
       });
+    });
+
+    socket.on('alerta_atendida', (data: { chatId?: number }) => {
+      const pendiente = alertasPendientes.get(user.id);
+      const chatId = Number(data?.chatId);
+      if (pendiente && pendiente.chatId === chatId) {
+        alertasPendientes.delete(user.id);
+      }
     });
 
     socket.on('disconnect', () => {

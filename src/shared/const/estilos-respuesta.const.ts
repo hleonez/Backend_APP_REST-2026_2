@@ -48,7 +48,7 @@ export const ESTILOS_RESPUESTA: EstiloRespuesta[] = [
       'Score de crisis de Clef. No depende de una lista de subcadenas.',
     especificaciones_obligatorias: [
       'Validar la emocion sin minimizarla.',
-      'Comunicar con calma que se esta conectando de inmediato con apoyo profesional (Salvavidas) o una linea de ayuda.',
+      'Comunicar con calma que se esta abriendo el chat en vivo con el psicologo de bienestar.',
       'No ofrecer tecnicas de autoayuda como sustituto de la derivacion profesional.',
     ],
     prohibiciones_extra: [

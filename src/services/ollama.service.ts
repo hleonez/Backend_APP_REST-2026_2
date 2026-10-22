@@ -48,7 +48,7 @@ interface ChatResponse {
 }
 
 const MENSAJE_CRITICO_FALLBACK =
-  'Gracias por contarmelo. Lo que estas viviendo es importante y no estas solo. Te recomiendo contactar ahora mismo al equipo de Salvavidas o a la consejeria de la Universidad Libre seccional Barranquilla. Si es urgente, llama al 123.';
+  'Gracias por contarmelo. Lo que estas viviendo es importante y no estas solo. Te voy a conectar con el psicologo de bienestar. Si no hay un profesional disponible, llama al 123 o acude a la consejeria de la Universidad Libre seccional Barranquilla.';
 
 const RESPUESTAS_DESECHABLES = [
   'no puedo asistir',
