@@ -17,7 +17,10 @@ export const registerSchema = z.object({
   telefono: z.string().min(7, 'Teléfono inválido'),
   ciudad: z.string().min(2, 'Ciudad demasiado corta'),
   edad: z.number().min(0, 'Edad inválida'),
-  sexo: z.enum(['M', 'F']).optional(),
+  sexo: z.preprocess(
+    (val) => (val === '' || val === null ? undefined : typeof val === 'string' ? val.toUpperCase() : val),
+    z.enum(['M', 'F', 'O', 'N']).optional()
+  ),
   semestre_actual: z.string().min(1).optional(),
   fecha_nacimiento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de fecha inválido (YYYY-MM-DD)').optional(),
 });
